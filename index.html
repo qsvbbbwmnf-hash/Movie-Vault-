@@ -258,39 +258,6 @@
     }
     .k{ color:var(--muted); }
     .v{ font-weight:800; text-align:right; }
-  
-    /* Collapsible Add/Edit panel */
-    /* When the Add/Edit panel is collapsed, let Library take full width */
-    .grid.formCollapsed{ grid-template-columns: 1fr !important; }
-
-    .card.isCollapsed{ display:none; }
-
-  
-    /* Library card quick delete */
-    .itemTop{
-      display:flex;
-      justify-content:space-between;
-      align-items:flex-start;
-      gap:10px;
-    }
-    .iconBtn{
-      border:1px solid rgba(255,255,255,.16);
-      background: rgba(255,255,255,.05);
-      color: rgba(255,255,255,.85);
-      border-radius: 10px;
-      padding:6px 8px;
-      font-size:12px;
-      line-height:1;
-      cursor:pointer;
-      user-select:none;
-    }
-    .iconBtn.danger{
-      border-color: rgba(255,77,77,.35);
-      background: rgba(255,77,77,.12);
-      color: rgba(255,255,255,.92);
-    }
-    .iconBtn:active{ transform: scale(.98); }
-
   </style>
 </head>
 <body>
@@ -313,9 +280,9 @@
       </div>
     </header>
 
-    <div class="grid" id="mainGrid">
+    <div class="grid">
       <!-- Add/Edit -->
-      <section class="card" id="formCard">
+      <section class="card">
         <div class="hd">
           <h2 id="formTitle">Add Movie</h2>
           
@@ -365,7 +332,6 @@
         <div class="hd">
           <h2>Library</h2>
           <div class="row">
-            <button class="btn small ghost" id="addToggleBtn" type="button">Add Movie</button>
             <input id="q" placeholder="Search title/director…" style="max-width:260px;" />
             <select id="sort" class="btn small" style="padding:9px 10px;">
               <option value="added_desc">Newest</option>
@@ -522,9 +488,6 @@ const UI = (() => {
     deleteBtn: document.getElementById("deleteBtn"),
     importFile: document.getElementById("importFile"),
     formTitle: document.getElementById("formTitle"),
-    formCard: document.getElementById("formCard"),
-    addToggleBtn: document.getElementById("addToggleBtn"),
-    mainGrid: document.getElementById("mainGrid"),
     q: document.getElementById("q"),
     sort: document.getElementById("sort"),
     list: document.getElementById("list"),
@@ -616,7 +579,7 @@ const UI = (() => {
       div.innerHTML = `
         ${thumb}
         <div>
-          <div class="itemTop">  <div class="title" style="margin:0;">${esc(m.title || "(Untitled)")}</div>  <button class="iconBtn danger delBtn" type="button" title="Delete" aria-label="Delete movie">Delete</button></div>
+          <div class="title">${esc(m.title || "(Untitled)")}</div>
           <div class="chipRow">
             <span class="chip"><span class="k">Year</span>${esc(yearSafe)}</span>
             <span class="chip"><span class="k">Director</span>${esc(m.director || "—")}</span>
@@ -649,17 +612,7 @@ const UI = (() => {
   }
   function closeModal(){ el.modal.classList.remove("open"); }
 
-
-  function setFormCollapsed(collapsed){
-    const c = !!collapsed;
-    if(el.formCard) el.formCard.classList.toggle("isCollapsed", c);
-    if(el.mainGrid) el.mainGrid.classList.toggle("formCollapsed", c);
-    if(el.addToggleBtn){
-      el.addToggleBtn.textContent = c ? "Add Movie" : "Hide Form";
-    }
-  }
-
-  return { el, toast, setCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, openModal, closeModal, setFormCollapsed };
+  return { el, toast, setCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, openModal, closeModal };
 })();
 
 /* 4) App */
@@ -668,19 +621,8 @@ const App = (() => {
   let editingId = null;
   let modalId = null;
   let currentPoster = "";
-  let formCollapsed = false;
 
   function getMovie(id){ return state.movies.find(x => x.id === id) || null; }
-
-  function updateFormVisibility({ forceCollapsed=null } = {}){
-    // Default: show form when vault is empty; otherwise keep it collapsed unless user opens it.
-    if(forceCollapsed !== null){
-      formCollapsed = !!forceCollapsed;
-    }else{
-      if(!state.movies || state.movies.length === 0) formCollapsed = false;
-    }
-    UI.setFormCollapsed(formCollapsed);
-  }
 
   function setPoster(dataUrl){
     currentPoster = dataUrl || "";
@@ -771,7 +713,6 @@ const App = (() => {
     setPoster("");
     UI.clearForm();
     UI.setEditMode(false);
-    updateFormVisibility();
   }
 
   function saveMovie(){
@@ -800,13 +741,11 @@ const App = (() => {
       // After updating, reset back to Add mode (less confusion, matches your workflow)
       resetForm();
       render();
-      updateFormVisibility({ forceCollapsed: (state.movies.length > 0) });
       UI.toast("Updated.");
     }else{
       state.movies.unshift(movie);
       resetForm(); // auto-reset after adding
       render();
-      updateFormVisibility({ forceCollapsed: (state.movies.length > 0) });
       UI.toast("Added.");
     }
   }
@@ -819,7 +758,6 @@ const App = (() => {
     state.movies = state.movies.filter(x => x.id !== m.id);
     resetForm();
     render();
-    updateFormVisibility();
     UI.toast("Deleted.");
   }
 
@@ -839,27 +777,12 @@ const App = (() => {
     UI.fillForm(m);
     setPoster(m.poster || "");
     UI.closeModal();
-    updateFormVisibility({ forceCollapsed: false });
-    // Bring the form into view on small screens
-    try{ UI.el.formCard && UI.el.formCard.scrollIntoView({ behavior:"smooth", block:"start" }); }catch(_){ }
     UI.toast("Loaded into editor.");
   }
 
   function wire(){
     UI.el.saveBtn.addEventListener("click", saveMovie);
 UI.el.deleteBtn.addEventListener("click", deleteMovie);
-
-
-    // Add/Edit panel toggle
-    if(UI.el.addToggleBtn){
-      UI.el.addToggleBtn.addEventListener("click", () => {
-        formCollapsed = !formCollapsed;
-        updateFormVisibility({ forceCollapsed: formCollapsed });
-        if(!formCollapsed){
-          try{ UI.el.formCard && UI.el.formCard.scrollIntoView({ behavior:"smooth", block:"start" }); }catch(_){ }
-        }
-      });
-    }
 
     // Tools dropdown (Backup / Restore)
     if(UI.el.toolsBtn && UI.el.toolsMenu){
@@ -906,27 +829,6 @@ UI.el.deleteBtn.addEventListener("click", deleteMovie);
 
     UI.el.list.addEventListener("click", (e) => {
       const card = e.target.closest(".item");
-      if(!card) return;
-
-      // Quick delete from Library card
-      const del = e.target.closest(".delBtn");
-      if(del){
-        e.stopPropagation();
-        const id = card.dataset.id;
-        const m = getMovie(id);
-        if(!m) return;
-        if(!confirm(`Delete "${m.title}"?`)) return;
-        state.movies = state.movies.filter(x => x.id !== id);
-        resetForm();
-        render();
-        updateFormVisibility();
-        UI.toast("Deleted.");
-        return;
-      }
-
-      // Otherwise open details
-      openModal(card.dataset.id);
-    });
       if(!card) return;
       openModal(card.dataset.id);
     });
@@ -995,8 +897,6 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
       });
     }
 
-    // Default: collapse form if you already have movies
-    updateFormVisibility({ forceCollapsed: (state.movies.length > 0) });
     resetForm();
     render();
   }
