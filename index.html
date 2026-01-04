@@ -258,6 +258,37 @@
     }
     .k{ color:var(--muted); }
     .v{ font-weight:800; text-align:right; }
+
+    .btn:disabled{
+      opacity:.55;
+      cursor:not-allowed;
+      filter:saturate(.9);
+    }
+
+    .vsep{
+      width:1px;
+      height:28px;
+      background: rgba(255,255,255,.14);
+      border-radius: 999px;
+      margin:0 2px;
+    }
+
+    /* Modal motion (subtle) */
+    .modal{
+      opacity:0;
+      transition: opacity .16s ease;
+    }
+    .modal.open{ opacity:1; }
+    .sheet{
+      transform: translateY(10px) scale(.99);
+      transition: transform .16s ease;
+    }
+    .modal.open .sheet{
+      transform: translateY(0) scale(1);
+    }
+    @media (prefers-reduced-motion: reduce){
+      .modal, .sheet{ transition:none !important; }
+    }
   </style>
 </head>
 <body>
@@ -265,10 +296,11 @@
     <header>
       <div>
         <h1>Movie Vault</h1>
-        <div class="sub">Plain build — manual entry only (v1.7.8 Add popup)</div>
+        <div class="sub">Plain build — manual entry only (v1.7.9 UX polish)</div>
       </div>
       <div class="row" style="gap:10px; align-items:center;">
         <button class="btn small primary" id="addMovieBtn" type="button">Add Movie</button>
+        <div class="vsep" aria-hidden="true"></div>
         <div class="toolsWrap" style="position:relative;">
           <button class="btn small ghost" id="toolsBtn" type="button" aria-haspopup="true" aria-expanded="false">Vault Backup ▾</button>
           <div class="toolsMenu" id="toolsMenu" role="menu" aria-label="Vault Backup">
@@ -277,7 +309,7 @@
           </div>
           <input id="importFile" class="fileOffscreen" type="file" accept="application/json" />
         </div>
-        <div class="pill" id="versionPill" style="opacity:.9;">v1.7.8</div>
+        <div class="pill" id="versionPill" style="opacity:.9;">v1.7.9</div>
         <div class="pill" id="countPill">0 movies</div>
       </div>
     </header>
@@ -385,7 +417,7 @@
   <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = "1.7.8";
+const APP_VERSION = "1.7.9";
 /* =========================================================
    Movie Vault (Plain)
    Clean layers: Config • Store • UI • App
@@ -394,7 +426,7 @@ const APP_VERSION = "1.7.8";
 
 /* 1) Config */
 const Config = (() => {
-  const VERSION = "1.7.8";
+  const VERSION = "1.7.9";
   const STORAGE_KEY = "movie_vault_plain_v1"; // fresh start
   return { VERSION, STORAGE_KEY };
 })();
@@ -457,7 +489,7 @@ const Store = (() => {
   function makeExportFile(state){
     const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
     // File helps iOS share sheet understand what it is
-    return new File([blob], "MovieVaultBackup_v1.7.8.json", { type: "application/json" });
+    return new File([blob], "MovieVaultBackup_v1.7.9.json", { type: "application/json" });
   }
 
   function downloadExport(state){
@@ -741,6 +773,7 @@ let editingId = null;
     setPoster("");
     UI.clearForm();
     UI.setEditMode(false);
+    if(UI.el.saveBtn) UI.el.saveBtn.disabled = true;
   }
 
   function saveMovie(){
@@ -810,16 +843,22 @@ let editingId = null;
     UI.closeModal();
     UI.openFormModal();
     UI.el.title && UI.el.title.focus();
+    if(UI.el.saveBtn) UI.el.saveBtn.disabled = !(UI.el.title && UI.el.title.value.trim());
     UI.toast("Loaded into editor.");
   }
 
   function wire(){
+    const syncSaveEnabled = () => {
+      const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
+      if(UI.el.saveBtn) UI.el.saveBtn.disabled = !hasTitle;
+    };
     // Add Movie opens the Add/Edit popup
     if(UI.el.addMovieBtn){
       UI.el.addMovieBtn.addEventListener("click", () => {
         resetForm();
         UI.openFormModal();
         UI.el.title && UI.el.title.focus();
+        syncSaveEnabled();
       });
     }
     if(UI.el.formCloseBtn){
@@ -944,6 +983,7 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
       }
     });
 
+    if(UI.el.title) UI.el.title.addEventListener("input", syncSaveEnabled);
     for(const inp of [UI.el.title, UI.el.release, UI.el.director]){
       inp.addEventListener("keydown", (e) => {
         if(e.key === "Enter"){ e.preventDefault(); saveMovie(); }
@@ -952,6 +992,7 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
 
     resetForm();
     render();
+    syncSaveEnabled();
   }
 
   return { init: wire };
