@@ -441,7 +441,7 @@
   <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = "1.8.1";
+const APP_VERSION = "1.8.2";
 /* =========================================================
    Movie Vault (Plain)
    Clean layers: Config • Store • UI • App
@@ -450,7 +450,7 @@ const APP_VERSION = "1.8.1";
 
 /* 1) Config */
 const Config = (() => {
-  const VERSION = "1.8.1";
+  const VERSION = "1.8.2";
   const STORAGE_KEY = "movie_vault_plain_v1"; // fresh start
   return { VERSION, STORAGE_KEY };
 })();
@@ -514,7 +514,7 @@ const Store = (() => {
   function makeExportFile(state){
     const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
     // File helps iOS share sheet understand what it is
-    return new File([blob], "MovieVaultBackup_v1.8.1.json", { type: "application/json" });
+    return new File([blob], "MovieVaultBackup_v1.8.2.json", { type: "application/json" });
   }
 
   function downloadExport(state){
@@ -879,6 +879,7 @@ let editingId = null;
   }
 
   function wire(){
+    let closeToolsMenu = () => {};
     const syncSaveEnabled = () => {
       const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       if(UI.el.saveBtn) UI.el.saveBtn.disabled = !hasTitle;
@@ -906,7 +907,7 @@ UI.el.deleteBtn.addEventListener("click", deleteMovie);
 
     // Tools dropdown (Backup / Restore)
     if(UI.el.toolsBtn && UI.el.toolsMenu){
-      const closeTools = () => {
+      closeToolsMenu = () => {
         UI.el.toolsMenu.classList.remove("open");
         UI.el.toolsBtn.setAttribute("aria-expanded","false");
       };
@@ -915,8 +916,8 @@ UI.el.deleteBtn.addEventListener("click", deleteMovie);
         const open = UI.el.toolsMenu.classList.toggle("open");
         UI.el.toolsBtn.setAttribute("aria-expanded", open ? "true" : "false");
       });
-      document.addEventListener("click", closeTools);
-      document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeTools(); });
+      document.addEventListener("click", () => closeToolsMenu());
+      document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeToolsMenu(); });
       UI.el.toolsMenu.addEventListener("click", (e) => e.stopPropagation());
     }
 
@@ -982,6 +983,7 @@ UI.el.modalDeleteBtn.addEventListener("click", (e) => {
       UI.toast("Deleted.");
     });
 if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => {
+      closeToolsMenu();
       // iOS/iPadOS: this opens the Share Sheet where you can "Save to Files" and pick a folder/name
       try{
         const file = Store.makeExportFile(state);
@@ -998,7 +1000,7 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
         UI.toast("Export canceled.");
       }
     });
-    if(UI.el.restoreBtnTop) UI.el.restoreBtnTop.addEventListener("click", () => UI.el.importFile.click());
+    if(UI.el.restoreBtnTop) UI.el.restoreBtnTop.addEventListener("click", () => { closeToolsMenu(); UI.el.importFile.click(); });
     if(UI.el.importFile) UI.el.importFile.addEventListener("change", async () => {
       const f = UI.el.importFile.files && UI.el.importFile.files[0];
       if(!f) return;
