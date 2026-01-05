@@ -322,7 +322,7 @@
     <header>
       <div>
         <h1>Movie Vault</h1>
-        <div class="sub">Plain build — manual entry only (v1.8.4 stable)</div>
+        <div class="sub">Plain build — manual entry only (v1.8.5 stable)</div>
       </div>
       <div class="row" style="gap:10px; align-items:center;">
         <button class="btn small primary" id="addMovieBtn" type="button">Add Movie</button>
@@ -449,7 +449,7 @@
   <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = "1.8.4";
+const APP_VERSION = "1.8.5";
 /* =========================================================
    Movie Vault (Plain)
    Clean layers: Config • Store • UI • App
@@ -458,7 +458,7 @@ const APP_VERSION = "1.8.4";
 
 /* 1) Config */
 const Config = (() => {
-  const VERSION = "1.8.4";
+  const VERSION = "1.8.5";
   const STORAGE_KEY = "movie_vault_plain_v1"; // fresh start
   return { VERSION, STORAGE_KEY };
 })();
@@ -522,7 +522,7 @@ const Store = (() => {
   function makeExportFile(state){
     const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
     // File helps iOS share sheet understand what it is
-    return new File([blob], "MovieVaultBackup_v1.8.4.json", { type: "application/json" });
+    return new File([blob], "MovieVaultBackup_v1.8.5.json", { type: "application/json" });
   }
 
   function downloadExport(state){
@@ -692,7 +692,6 @@ const UI = (() => {
           <div class="row"><div class="k">Release</div><div class="v">${esc(m.release || "—")}</div></div>
           <div class="row"><div class="k">Director</div><div class="v">${esc(m.director || "—")}</div></div>
           <div class="row plot"><div class="k">Plot</div><div class="v">${esc(m.plot || "—")}</div></div>
-          <div class="row"><div class="k">Updated</div><div class="v">${esc(new Date(m.updatedAt).toLocaleString())}</div></div>
         </div>
       </div>
     `;
