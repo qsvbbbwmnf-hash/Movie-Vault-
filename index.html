@@ -536,7 +536,7 @@ function getTopCastFromCredits(credits, max = 2) {
     .join(', ');
 }
 
-const APP_VERSION = "v2.0.12";
+const APP_VERSION = "v2.0.13";
 
   function applyAppVersion(){
     try{
@@ -1275,8 +1275,8 @@ let editingId = null;
     // credits for director(s) (TMDb)
     let directorFromTmdb = "";
     try{
-      const c = await Api.tmdbCredits(tmdbId, apiKeys.tmdb);
-      const crew = (c && c.crew) ? c.crew : [];
+      const tmdbCredits = await Api.tmdbCredits(tmdbId, apiKeys.tmdb);
+      const crew = (tmdbCredits && tmdbCredits.crew) ? tmdbCredits.crew : [];
       const dirs = crew
         .filter(x => x && x.job === "Director" && x.name)
         .map(x => String(x.name).trim())
