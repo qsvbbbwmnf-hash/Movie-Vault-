@@ -322,7 +322,7 @@
     <header>
       <div>
         <h1>Movie Vault</h1>
-        <div class="sub">Plain build — manual entry only (v1.8.5 stable)</div>
+        <div class="sub">Plain build — manual entry only (v2.0.0 autofill hybrid)</div>
       </div>
       <div class="row" style="gap:10px; align-items:center;">
         <button class="btn small primary" id="addMovieBtn" type="button">Add Movie</button>
@@ -332,6 +332,8 @@
           <div class="toolsMenu" id="toolsMenu" role="menu" aria-label="Vault Backup">
             <button class="btn small ghost toolsItem" id="backupBtnTop" type="button" role="menuitem">Backup to Files…</button>
             <button class="btn small ghost toolsItem" id="restoreBtnTop" type="button" role="menuitem">Restore from Files…</button>
+            <div class="sep" style="margin:8px 0;"></div>
+            <button class="btn small ghost toolsItem" id="keysBtnTop" type="button" role="menuitem">API Keys…</button>
           </div>
           <input id="importFile" class="fileOffscreen" type="file" accept="application/json" />
         </div>
@@ -377,6 +379,7 @@
           <div style="color:rgba(255,255,255,.68); font-size:12px;">Manual entry — posters optional</div>
         </div>
         <div class="row">
+          <button class="btn small ghost" id="autoFillBtn" type="button">Auto-Fill</button>
           <button class="btn small ghost" id="formCloseBtn" type="button">Close</button>
         </div>
       </div>
@@ -446,10 +449,41 @@
     </div>
   </div>
 
+  
+  <!-- API Keys modal -->
+  <div class="modal" id="keysModal" role="dialog" aria-modal="true" aria-label="API keys">
+    <div class="sheet" id="keysSheet">
+      <div class="top">
+        <div style="min-width:0;">
+          <div style="font-weight:900; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">API Keys</div>
+          <div style="color:rgba(255,255,255,.68); font-size:12px;">Stored locally on this device (LocalStorage). Keep your repo public-safe.</div>
+        </div>
+        <div class="row">
+          <button class="btn small ghost" id="keysCloseBtn" type="button">Close</button>
+        </div>
+      </div>
+      <div class="body stack">
+        <div class="hint">These keys are required for Auto-Fill (TMDb → IMDb ID → OMDb). Stored only in your browser on this device.</div>
+        <div>
+          <label for="tmdbKey">TMDb API Key</label>
+          <input id="tmdbKey" placeholder="Paste TMDb key…" autocomplete="off" />
+        </div>
+        <div>
+          <label for="omdbKey">OMDb API Key</label>
+          <input id="omdbKey" placeholder="Paste OMDb key…" autocomplete="off" />
+        </div>
+        <div class="row">
+          <button class="btn primary grow" id="keysSaveBtn" type="button">Save Keys</button>
+          <button class="btn danger" id="keysClearBtn" type="button">Clear</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = "1.8.5";
+const APP_VERSION = "2.0.0";
 /* =========================================================
    Movie Vault (Plain)
    Clean layers: Config • Store • UI • App
@@ -458,10 +492,78 @@ const APP_VERSION = "1.8.5";
 
 /* 1) Config */
 const Config = (() => {
-  const VERSION = "1.8.5";
+  const VERSION = "2.0.0";
   const STORAGE_KEY = "movie_vault_plain_v1"; // fresh start
   return { VERSION, STORAGE_KEY };
 })();
+
+
+/* 1.5) API (Hybrid Auto-Fill: TMDb → IMDb → OMDb) */
+const Api = (() => {
+  const KEY_STORAGE = "movie_vault_api_keys_v1";
+  function loadKeys(){
+    try{
+      const raw = localStorage.getItem(KEY_STORAGE);
+      if(!raw) return { tmdb:"", omdb:"" };
+      const k = JSON.parse(raw);
+      return { tmdb: String(k.tmdb||""), omdb: String(k.omdb||"") };
+    }catch(_){
+      return { tmdb:"", omdb:"" };
+    }
+  }
+  function saveKeys(keys){
+    localStorage.setItem(KEY_STORAGE, JSON.stringify({ tmdb: keys.tmdb||"", omdb: keys.omdb||"" }));
+  }
+  function clearKeys(){ localStorage.removeItem(KEY_STORAGE); }
+
+  async function tmdbSearch(title, year, tmdbKey){
+    const params = new URLSearchParams({
+      api_key: tmdbKey,
+      query: title,
+      include_adult: "false",
+      language: "en-US"
+    });
+    if(year) params.set("year", year);
+    const url = "https://api.themoviedb.org/3/search/movie?" + params.toString();
+    const r = await fetch(url);
+    if(!r.ok) throw new Error("TMDb search failed.");
+    return r.json();
+  }
+
+  async function tmdbDetails(movieId, tmdbKey){
+    const params = new URLSearchParams({
+      api_key: tmdbKey,
+      language: "en-US",
+      append_to_response: "external_ids"
+    });
+    const url = "https://api.themoviedb.org/3/movie/" + encodeURIComponent(movieId) + "?" + params.toString();
+    const r = await fetch(url);
+    if(!r.ok) throw new Error("TMDb details failed.");
+    return r.json();
+  }
+
+  async function omdbByImdb(imdbId, omdbKey){
+    const params = new URLSearchParams({
+      apikey: omdbKey,
+      i: imdbId,
+      plot: "short"
+    });
+    const url = "https://www.omdbapi.com/?" + params.toString();
+    const r = await fetch(url);
+    if(!r.ok) throw new Error("OMDb request failed.");
+    const j = await r.json();
+    if(j && j.Response === "False") throw new Error(j.Error || "OMDb returned no result.");
+    return j;
+  }
+
+  function tmdbPosterUrl(path){
+    if(!path) return "";
+    return "https://image.tmdb.org/t/p/w500" + path;
+  }
+
+  return { loadKeys, saveKeys, clearKeys, tmdbSearch, tmdbDetails, omdbByImdb, tmdbPosterUrl };
+})();
+
 
 /* 2) Store */
 const Store = (() => {
@@ -522,7 +624,7 @@ const Store = (() => {
   function makeExportFile(state){
     const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
     // File helps iOS share sheet understand what it is
-    return new File([blob], "MovieVaultBackup_v1.8.5.json", { type: "application/json" });
+    return new File([blob], "MovieVaultBackup_v2.0.0.json", { type: "application/json" });
   }
 
   function downloadExport(state){
@@ -580,6 +682,17 @@ const UI = (() => {
     toolsMenu: document.getElementById("toolsMenu"),
     backupBtnTop: document.getElementById("backupBtnTop"),
     restoreBtnTop: document.getElementById("restoreBtnTop"),
+
+    autoFillBtn: document.getElementById("autoFillBtn"),
+    // keys
+    keysBtnTop: document.getElementById("keysBtnTop"),
+    keysModal: document.getElementById("keysModal"),
+    keysSheet: document.getElementById("keysSheet"),
+    keysCloseBtn: document.getElementById("keysCloseBtn"),
+    keysSaveBtn: document.getElementById("keysSaveBtn"),
+    keysClearBtn: document.getElementById("keysClearBtn"),
+    tmdbKey: document.getElementById("tmdbKey"),
+    omdbKey: document.getElementById("omdbKey"),
     toast: document.getElementById("toast"),
     // modal
     modal: document.getElementById("modal"),
@@ -677,6 +790,9 @@ const UI = (() => {
   function openFormModal(){ el.formModal.classList.add("open"); }
   function closeFormModal(){ el.formModal.classList.remove("open"); }
 
+  function openKeysModal(){ el.keysModal && el.keysModal.classList.add("open"); }
+  function closeKeysModal(){ el.keysModal && el.keysModal.classList.remove("open"); }
+
   function openModal(m){
     el.mTitle.textContent = m.title || "(Untitled)";
     el.mSub.textContent = m.release ? `Release: ${m.release}` : "—";
@@ -704,12 +820,13 @@ const UI = (() => {
     if(el.versionPill) el.versionPill.textContent = v ? ("v" + v) : "";
   }
 
-  return { el, toast, setVersion, setCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, openFormModal, closeFormModal, openModal, closeModal };
+  return { el, toast, setVersion, setCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openModal, closeModal };
 })();
 
 /* 4) App */
 const App = (() => {
   let state = Store.load();
+  let apiKeys = Api.loadKeys();
   
     // Version stamp
     state.appVersion = APP_VERSION;
@@ -885,6 +1002,100 @@ let editingId = null;
     UI.toast("Loaded into editor.");
   }
 
+
+  function openKeys(){
+    apiKeys = Api.loadKeys();
+    if(UI.el.tmdbKey) UI.el.tmdbKey.value = apiKeys.tmdb || "";
+    if(UI.el.omdbKey) UI.el.omdbKey.value = apiKeys.omdb || "";
+    UI.openKeysModal();
+    UI.el.tmdbKey && UI.el.tmdbKey.focus();
+  }
+
+  function closeKeys(){ UI.closeKeysModal(); }
+
+  async function fetchImageToDataUrl(url){
+    const r = await fetch(url);
+    if(!r.ok) throw new Error("Could not fetch poster image.");
+    const blob = await r.blob();
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result||""));
+      fr.onerror = () => reject(new Error("Could not read poster image."));
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  async function shrinkDataUrl(dataUrl){
+    const img = await loadImage(dataUrl);
+    const maxW = 420, maxH = 630;
+    const w = img.naturalWidth || img.width || 1;
+    const h = img.naturalHeight || img.height || 1;
+    const scale = Math.min(1, maxW / w, maxH / h);
+    const nw = Math.max(1, Math.round(w * scale));
+    const nh = Math.max(1, Math.round(h * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = nw; canvas.height = nh;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, nw, nh);
+    return canvas.toDataURL("image/jpeg", 0.82);
+  }
+
+  async function autoFill(){
+    const title = (UI.el.title && UI.el.title.value || "").trim();
+    if(!title){
+      UI.toast("Type a title first.");
+      UI.el.title && UI.el.title.focus();
+      return;
+    }
+    apiKeys = Api.loadKeys();
+    if(!apiKeys.tmdb || !apiKeys.omdb){
+      UI.toast("Add your API keys first.");
+      openKeys();
+      return;
+    }
+    const year = ((UI.el.release && UI.el.release.value || "").trim().slice(0,4));
+    const yearParam = (/^[0-9]{4}$/.test(year) ? year : "");
+
+    UI.toast("Searching…");
+    try{
+      const s = await Api.tmdbSearch(title, yearParam, apiKeys.tmdb);
+      const first = s && s.results && s.results[0];
+      if(!first) throw new Error("No TMDb match found.");
+      const d = await Api.tmdbDetails(first.id, apiKeys.tmdb);
+      const imdbId = d && d.external_ids && d.external_ids.imdb_id ? String(d.external_ids.imdb_id) : "";
+      let om = null;
+      if(imdbId){ om = await Api.omdbByImdb(imdbId, apiKeys.omdb); }
+
+      if(om){
+        UI.el.title.value = om.Title || d.title || title;
+        UI.el.release.value = (om.Released && om.Released !== "N/A") ? om.Released : (d.release_date || UI.el.release.value || "");
+        UI.el.director.value = (om.Director && om.Director !== "N/A") ? om.Director : (UI.el.director.value || "");
+        if(UI.el.plot) UI.el.plot.value = (om.Plot && om.Plot !== "N/A") ? om.Plot : (d.overview || UI.el.plot.value || "");
+      }else{
+        UI.el.title.value = d.title || title;
+        UI.el.release.value = d.release_date || UI.el.release.value || "";
+        if(UI.el.plot) UI.el.plot.value = d.overview || UI.el.plot.value || "";
+      }
+
+      const posterUrl = (om && om.Poster && om.Poster !== "N/A") ? om.Poster : Api.tmdbPosterUrl(d.poster_path);
+      if(posterUrl){
+        try{
+          const dataUrl = await fetchImageToDataUrl(posterUrl);
+          const small = await shrinkDataUrl(dataUrl);
+          setPoster(small);
+        }catch(_){}
+      }
+
+      const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
+      if(UI.el.saveBtn) UI.el.saveBtn.disabled = !hasTitle;
+
+      UI.toast("Auto-filled.");
+    }catch(err){
+      UI.toast(String(err.message || err));
+    }
+  }
+
+
   function wire(){
     let closeToolsMenu = () => {};
     const syncSaveEnabled = () => {
@@ -909,7 +1120,30 @@ let editingId = null;
       });
     }
 
+    // Keys modal
+    if(UI.el.keysCloseBtn) UI.el.keysCloseBtn.addEventListener("click", closeKeys);
+    if(UI.el.keysModal) UI.el.keysModal.addEventListener("click", (e) => { if(e.target === UI.el.keysModal) closeKeys(); });
+    if(UI.el.keysSheet) UI.el.keysSheet.addEventListener("click", (e) => e.stopPropagation());
+    if(UI.el.keysSaveBtn) UI.el.keysSaveBtn.addEventListener("click", () => {
+      const tmdb = (UI.el.tmdbKey && UI.el.tmdbKey.value || "").trim();
+      const omdb = (UI.el.omdbKey && UI.el.omdbKey.value || "").trim();
+      Api.saveKeys({ tmdb, omdb });
+      apiKeys = Api.loadKeys();
+      UI.toast("Keys saved.");
+      closeKeys();
+    });
+    if(UI.el.keysClearBtn) UI.el.keysClearBtn.addEventListener("click", () => {
+      if(!confirm("Clear saved API keys on this device?")) return;
+      Api.clearKeys();
+      apiKeys = Api.loadKeys();
+      if(UI.el.tmdbKey) UI.el.tmdbKey.value = "";
+      if(UI.el.omdbKey) UI.el.omdbKey.value = "";
+      UI.toast("Keys cleared.");
+    });
+
     UI.el.saveBtn.addEventListener("click", saveMovie);
+    if(UI.el.autoFillBtn) UI.el.autoFillBtn.addEventListener("click", autoFill);
+
 UI.el.deleteBtn.addEventListener("click", deleteMovie);
 
     // Tools dropdown (Backup / Restore)
@@ -971,6 +1205,7 @@ UI.el.deleteBtn.addEventListener("click", deleteMovie);
       if(e.key === "Escape"){
         if(UI.el.modal.classList.contains("open")){ modalId=null; UI.closeModal(); }
         if(UI.el.formModal && UI.el.formModal.classList.contains("open")){ UI.closeFormModal(); }
+        if(UI.el.keysModal && UI.el.keysModal.classList.contains("open")){ UI.closeKeysModal(); }
       }
     });
     UI.el.editBtn.addEventListener("click", editFromModal);
@@ -1008,6 +1243,7 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
       }
     });
     if(UI.el.restoreBtnTop) UI.el.restoreBtnTop.addEventListener("click", () => { closeToolsMenu(); UI.el.importFile.click(); });
+    if(UI.el.keysBtnTop) UI.el.keysBtnTop.addEventListener("click", () => { closeToolsMenu(); openKeys(); });
     if(UI.el.importFile) UI.el.importFile.addEventListener("change", async () => {
       const f = UI.el.importFile.files && UI.el.importFile.files[0];
       if(!f) return;
