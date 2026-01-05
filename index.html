@@ -527,6 +527,15 @@
   <div class="toast" id="toast"></div>
 
 <script>
+
+function getTopCastFromCredits(credits, max = 2) {
+  if (!credits || !credits.cast) return '';
+  return credits.cast
+    .slice(0, max)
+    .map(c => c.name)
+    .join(', ');
+}
+
 const APP_VERSION = "v2.0.8";
 
   function applyAppVersion(){
@@ -1280,7 +1289,7 @@ let editingId = null;
     if(UI.el.title) UI.el.title.value = d.title || typedTitle || UI.el.title.value || "";
     if(UI.el.release) UI.el.release.value = d.release_date || UI.el.release.value || "";
     if(UI.el.director) UI.el.director.value = directorFromTmdb || UI.el.director.value || "";
-    if(UI.el.cast) UI.el.cast.value = castFromTmdb || UI.el.cast.value || "";
+    if(UI.el.cast) UI.el.cast.value = getTopCastFromCredits || UI.el.cast.value || "";
 
     if(UI.el.runtime && d.runtime != null) UI.el.runtime.value = String(d.runtime);
     if(UI.el.genre && Array.isArray(d.genres)) UI.el.genre.value = d.genres.map(g => g && g.name).filter(Boolean).join(", ");
