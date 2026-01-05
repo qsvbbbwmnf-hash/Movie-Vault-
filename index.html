@@ -360,7 +360,7 @@
           </div>
           <input id="importFile" class="fileOffscreen" type="file" accept="application/json" />
         </div>
-        <div class="pill" id="versionPill" style="opacity:.9;">v1.8.1</div>
+        <div class="pill" id="versionPill" style="opacity:.9;">v2.0.2</div>
         <div class="pill" id="countPill">0 movies</div>
       </div>
     </header>
@@ -526,6 +526,13 @@
 
 <script>
 const APP_VERSION = "2.0.2";
+
+// Safe HTML escaping (prevents broken UI / injection)
+function escapeHtml(str){
+  if(str === null || str === undefined) return "";
+  return String(str).replace(/[&<>\"\']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","\'":"&#39;"}[c]));
+}
+
 /* =========================================================
    Movie Vault (Plain)
    Clean layers: Config • Store • UI • App
