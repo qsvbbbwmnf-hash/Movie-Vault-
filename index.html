@@ -424,7 +424,11 @@
           <input id="director" placeholder="e.g., Steven Spielberg" autocomplete="off" />
         </div>
 
-        <input id="cast" type="hidden" />
+        <div>
+          <label for="cast">Cast (optional)</label>
+          <input id="cast" placeholder="e.g., Sigourney Weaver, Tom Skerritt" autocomplete="off" />
+          <div class="hint">Auto-Fill adds the top cast; you can edit it here.</div>
+        </div>
 
         
 
@@ -523,7 +527,7 @@
   <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = "v2.0.7";
+const APP_VERSION = "v2.0.8";
 
   function applyAppVersion(){
     try{
