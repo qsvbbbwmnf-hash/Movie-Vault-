@@ -345,7 +345,7 @@
     <header>
       <div>
         <h1>Movie Vault</h1>
-        <div class="sub">Plain build — manual entry only (v2.0.2 autofill hybrid)</div>
+        <div class="sub">Plain build — manual entry only (v2.0.3 autofill hybrid)</div>
       </div>
       <div class="row" style="gap:10px; align-items:center;">
         <button class="btn small primary" id="addMovieBtn" type="button">Add Movie</button>
@@ -360,7 +360,7 @@
           </div>
           <input id="importFile" class="fileOffscreen" type="file" accept="application/json" />
         </div>
-        <div class="pill" id="versionPill" style="opacity:.9;">v2.0.2</div>
+        <div class="pill" id="versionPill" style="opacity:.9;">v2.0.3</div>
         <div class="pill" id="countPill">0 movies</div>
       </div>
     </header>
@@ -486,16 +486,12 @@
         </div>
       </div>
       <div class="body stack">
-        <div class="hint">These keys are required for Auto-Fill (TMDb → IMDb ID → OMDb). Stored only in your browser on this device.</div>
+        <div class="hint">These keys are required for Auto-Fill (TMDb only). Stored only in your browser on this device.</div>
         <div>
           <label for="tmdbKey">TMDb API Key</label>
           <input id="tmdbKey" placeholder="Paste TMDb key…" autocomplete="off" />
         </div>
-        <div>
-          <label for="omdbKey">OMDb API Key</label>
-          <input id="omdbKey" placeholder="Paste OMDb key…" autocomplete="off" />
-        </div>
-        <div class="row">
+<div class="row">
           <button class="btn primary grow" id="keysSaveBtn" type="button">Save Keys</button>
           <button class="btn danger" id="keysClearBtn" type="button">Clear</button>
         </div>
@@ -525,7 +521,7 @@
   <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = "2.0.2";
+const APP_VERSION = "2.0.3";
 
 // Safe HTML escaping (prevents broken UI / injection)
 function escapeHtml(str){
@@ -536,12 +532,12 @@ function escapeHtml(str){
 /* =========================================================
    Movie Vault (Plain)
    Clean layers: Config • Store • UI • App
-   Manual entry only (no OMDb/TMDb)
+   Manual entry only (no TMDb)
    ========================================================= */
 
 /* 1) Config */
 const Config = (() => {
-  const VERSION = "2.0.2";
+  const VERSION = "2.0.3";
   const STORAGE_KEY = "movie_vault_plain_v1"; // fresh start
   return { VERSION, STORAGE_KEY };
 })();
@@ -553,11 +549,11 @@ const Api = (() => {
   function loadKeys(){
     try{
       const raw = localStorage.getItem(KEY_STORAGE);
-      if(!raw) return { tmdb:"", omdb:"" };
+      if(!raw) return { tmdb:"" };
       const k = JSON.parse(raw);
-      return { tmdb: String(k.tmdb||""), omdb: String(k.omdb||"") };
+      return { tmdb: String(k.tmdb||"") };
     }catch(_){
-      return { tmdb:"", omdb:"" };
+      return { tmdb:"" };
     }
   }
   function saveKeys(keys){
@@ -651,7 +647,7 @@ const Api = (() => {
     return "https://image.tmdb.org/t/p/w500" + path;
   }
 
-  return { loadKeys, saveKeys, clearKeys, tmdbSearch, tmdbDetails, tmdbCredits, omdbByImdb, omdbByTitle, tmdbPosterUrl };
+  return { loadKeys, saveKeys, clearKeys, tmdbSearch, tmdbDetails, tmdbCredits, tmdbPosterUrl };
 })();
 
 
@@ -714,7 +710,7 @@ const Store = (() => {
   function makeExportFile(state){
     const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
     // File helps iOS share sheet understand what it is
-    return new File([blob], "MovieVaultBackup_v2.0.2.json", { type: "application/json" });
+    return new File([blob], "MovieVaultBackup_v2.0.3.json", { type: "application/json" });
   }
 
   function downloadExport(state){
@@ -782,8 +778,6 @@ const UI = (() => {
     keysSaveBtn: document.getElementById("keysSaveBtn"),
     keysClearBtn: document.getElementById("keysClearBtn"),
     tmdbKey: document.getElementById("tmdbKey"),
-    omdbKey: document.getElementById("omdbKey"),
-
     // autofill picker
     pickModal: document.getElementById("pickModal"),
     pickSheet: document.getElementById("pickSheet"),
@@ -1105,7 +1099,6 @@ let editingId = null;
   function openKeys(){
     apiKeys = Api.loadKeys();
     if(UI.el.tmdbKey) UI.el.tmdbKey.value = apiKeys.tmdb || "";
-    if(UI.el.omdbKey) UI.el.omdbKey.value = apiKeys.omdb || "";
     UI.openKeysModal();
     UI.el.tmdbKey && UI.el.tmdbKey.focus();
   }
@@ -1147,7 +1140,7 @@ let editingId = null;
       return;
     }
     apiKeys = Api.loadKeys();
-    if(!apiKeys.tmdb || !apiKeys.omdb){
+    if(!apiKeys.tmdb || !""){
       UI.toast("Add your API keys first.");
       openKeys();
       return;
@@ -1239,42 +1232,31 @@ let editingId = null;
     apiKeys = Api.loadKeys();
 
     const d = await Api.tmdbDetails(tmdbId, apiKeys.tmdb);
-    // credits for director (TMDb)
+
+    // credits for director(s) (TMDb)
     let directorFromTmdb = "";
     try{
       const c = await Api.tmdbCredits(tmdbId, apiKeys.tmdb);
       const crew = (c && c.crew) ? c.crew : [];
-      const dir = crew.find(x => x && x.job === "Director");
-      if(dir && dir.name) directorFromTmdb = String(dir.name);
+      const dirs = crew
+        .filter(x => x && x.job === "Director" && x.name)
+        .map(x => String(x.name).trim())
+        .filter(Boolean);
+      const uniq = Array.from(new Set(dirs));
+      directorFromTmdb = uniq.join(", ");
     }catch(_){}
 
-    const imdbId = d && d.external_ids && d.external_ids.imdb_id ? String(d.external_ids.imdb_id) : "";
+    // Fill fields from TMDb (no OMDb)
+    if(UI.el.title) UI.el.title.value = d.title || typedTitle || UI.el.title.value || "";
+    if(UI.el.release) UI.el.release.value = d.release_date || UI.el.release.value || "";
+    if(UI.el.director) UI.el.director.value = directorFromTmdb || UI.el.director.value || "";
 
-    let om = null;
-    let omdbWarn = "";
-    if(imdbId){
-      try{ om = await Api.omdbByImdb(imdbId, apiKeys.omdb); }
-      catch(e){ omdbWarn = String(e.message || e); }
-    }
-    if(!om){
-      try{ om = await Api.omdbByTitle(d.title || typedTitle, (d.release_date||"").slice(0,4), apiKeys.omdb); }
-      catch(e){ if(!omdbWarn) omdbWarn = String(e.message || e); }
-    }
+    if(UI.el.runtime && d.runtime != null) UI.el.runtime.value = String(d.runtime);
+    if(UI.el.genre && Array.isArray(d.genres)) UI.el.genre.value = d.genres.map(g => g && g.name).filter(Boolean).join(", ");
+    if(UI.el.plot) UI.el.plot.value = d.overview || UI.el.plot.value || "";
 
-    if(om){
-      UI.el.title.value = om.Title || d.title || typedTitle;
-      UI.el.release.value = (om.Released && om.Released !== "N/A") ? om.Released : (d.release_date || UI.el.release.value || "");
-      const omDir = (om.Director && om.Director !== "N/A") ? om.Director : "";
-      UI.el.director.value = omDir || directorFromTmdb || UI.el.director.value || "";
-      if(UI.el.plot) UI.el.plot.value = (om.Plot && om.Plot !== "N/A") ? om.Plot : (d.overview || UI.el.plot.value || "");
-    }else{
-      UI.el.title.value = d.title || typedTitle;
-      UI.el.release.value = d.release_date || UI.el.release.value || "";
-      UI.el.director.value = directorFromTmdb || UI.el.director.value || "";
-      if(UI.el.plot) UI.el.plot.value = d.overview || UI.el.plot.value || "";
-    }
-
-    const posterUrl = (om && om.Poster && om.Poster !== "N/A") ? om.Poster : Api.tmdbPosterUrl(d.poster_path);
+    // Poster
+    const posterUrl = d && d.poster_path ? Api.tmdbPosterUrl(d.poster_path) : "";
     if(posterUrl){
       try{
         const dataUrl = await fetchImageToDataUrl(posterUrl);
@@ -1286,12 +1268,9 @@ let editingId = null;
     const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     if(UI.el.saveBtn) UI.el.saveBtn.disabled = !hasTitle;
 
-    if(!om && omdbWarn){
-      UI.toast("Filled (TMDb). OMDb: " + omdbWarn);
-    }else{
-      UI.toast("Auto-filled.");
-    }
+    UI.toast("Filled (TMDb).");
   }
+
 
   function wire(){
     let closeToolsMenu = () => {};
@@ -1323,7 +1302,7 @@ let editingId = null;
     if(UI.el.keysSheet) UI.el.keysSheet.addEventListener("click", (e) => e.stopPropagation());
     if(UI.el.keysSaveBtn) UI.el.keysSaveBtn.addEventListener("click", () => {
       const tmdb = (UI.el.tmdbKey && UI.el.tmdbKey.value || "").trim();
-      const omdb = (UI.el.omdbKey && UI.el.omdbKey.value || "").trim();
+      const omdb = "";
       Api.saveKeys({ tmdb, omdb });
       apiKeys = Api.loadKeys();
       UI.toast("Keys saved.");
@@ -1334,7 +1313,6 @@ let editingId = null;
       Api.clearKeys();
       apiKeys = Api.loadKeys();
       if(UI.el.tmdbKey) UI.el.tmdbKey.value = "";
-      if(UI.el.omdbKey) UI.el.omdbKey.value = "";
       UI.toast("Keys cleared.");
     });
 
