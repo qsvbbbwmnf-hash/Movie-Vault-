@@ -537,7 +537,7 @@ function escapeHtml(str){
 
 /* 1) Config */
 const Config = (() => {
-  const VERSION = "2.0.3";
+  const VERSION = "2.0.5";
   const STORAGE_KEY = "movie_vault_plain_v1"; // fresh start
   return { VERSION, STORAGE_KEY };
 })();
@@ -1262,10 +1262,12 @@ let editingId = null;
         const dataUrl = await fetchImageToDataUrl(posterUrl);
         const small = await shrinkDataUrl(dataUrl);
         setPoster(small);
-      }catch(_){}
+      }catch(_){
+        // If TMDb image CORS blocks dataURL conversion, fall back to using the direct URL.
+        setPoster(posterUrl);
+      }
     }
-
-    const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
+const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     if(UI.el.saveBtn) UI.el.saveBtn.disabled = !hasTitle;
 
     UI.toast("Filled (TMDb).");
