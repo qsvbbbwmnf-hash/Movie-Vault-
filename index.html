@@ -537,7 +537,7 @@ function escapeHtml(str){
 
 /* 1) Config */
 const Config = (() => {
-  const VERSION = "2.0.5";
+  const VERSION = "2.0.6";
   const STORAGE_KEY = "movie_vault_plain_v1"; // fresh start
   return { VERSION, STORAGE_KEY };
 })();
@@ -805,6 +805,14 @@ const UI = (() => {
 
   function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
 
+  function formatReleaseDate(dateStr){
+    if(!dateStr) return "—";
+    const d = new Date(dateStr);
+    if(Number.isNaN(d.getTime())) return String(dateStr);
+    // Example style: Dec 25 1964
+    return d.toLocaleDateString("en-US",{month:"short",day:"2-digit",year:"numeric"}).replace(/,/g,"");
+  }
+
   function setCount(n){ el.countPill.textContent = (n===1) ? "1 movie" : `${n} movies`; }
 
   function setEditMode(on){
@@ -887,8 +895,9 @@ const UI = (() => {
   function closePickModal(){ el.pickModal && el.pickModal.classList.remove("open"); }
 
   function openModal(m){
+    const prettyRelease = formatReleaseDate(m.release);
     el.mTitle.textContent = m.title || "(Untitled)";
-    el.mSub.textContent = m.release ? `Release: ${m.release}` : "—";
+    el.mSub.textContent = (prettyRelease && prettyRelease !== "—") ? `Release: ${prettyRelease}` : "—";
     const poster = m.poster
       ? `<img class="modalPoster" alt="Poster" src="${esc(m.poster)}" />`
       : `<div class="modalPoster" style="display:grid; place-items:center; color:rgba(255,255,255,.55); font-size:12px;">No poster</div>`;
@@ -898,7 +907,7 @@ const UI = (() => {
         ${poster}
         <div style="flex:1; min-width:240px;" class="kv">
           <div class="row"><div class="k">Title</div><div class="v">${esc(m.title || "—")}</div></div>
-          <div class="row"><div class="k">Release</div><div class="v">${esc(m.release || "—")}</div></div>
+          <div class="row"><div class="k">Release</div><div class="v">${esc(prettyRelease || "—")}</div></div>
           <div class="row"><div class="k">Director</div><div class="v">${esc(m.director || "—")}</div></div>
           <div class="row plot"><div class="k">Plot</div><div class="v">${esc(m.plot || "—")}</div></div>
         </div>
