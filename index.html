@@ -241,18 +241,26 @@
     .modal.open{ display:grid; }
     .sheet{
       width:min(720px, 100%);
+      max-height: 92vh;
+      display: flex;
+      flex-direction: column;
       border-radius: 18px;
       border:1px solid rgba(255,255,255,.16);
       background: rgba(20,22,30,.92);
       box-shadow: 0 24px 80px rgba(0,0,0,.55);
-      overflow:hidden;
+      overflow: hidden;
     }
     .sheet .top{
       padding:14px;
       border-bottom:1px solid rgba(255,255,255,.10);
       display:flex; justify-content:space-between; gap:12px; align-items:center;
     }
-    .sheet .body{ padding:14px; }
+    .sheet .body{
+      padding:14px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      flex: 1;
+    }
     .kv{ display:grid; gap:8px; }
     .kv .row{
       display:flex; justify-content:space-between; gap:10px;
@@ -314,7 +322,7 @@
     <header>
       <div>
         <h1>Movie Vault</h1>
-        <div class="sub">Plain build — manual entry only (v1.8.3 UX polish)</div>
+        <div class="sub">Plain build — manual entry only (v1.8.4 stable)</div>
       </div>
       <div class="row" style="gap:10px; align-items:center;">
         <button class="btn small primary" id="addMovieBtn" type="button">Add Movie</button>
@@ -327,7 +335,7 @@
           </div>
           <input id="importFile" class="fileOffscreen" type="file" accept="application/json" />
         </div>
-        <div class="pill" id="versionPill" style="opacity:.9;">v1.8.3</div>
+        <div class="pill" id="versionPill" style="opacity:.9;">v1.8.1</div>
         <div class="pill" id="countPill">0 movies</div>
       </div>
     </header>
@@ -441,7 +449,7 @@
   <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = "1.8.3";
+const APP_VERSION = "1.8.4";
 /* =========================================================
    Movie Vault (Plain)
    Clean layers: Config • Store • UI • App
@@ -450,7 +458,7 @@ const APP_VERSION = "1.8.3";
 
 /* 1) Config */
 const Config = (() => {
-  const VERSION = "1.8.3";
+  const VERSION = "1.8.4";
   const STORAGE_KEY = "movie_vault_plain_v1"; // fresh start
   return { VERSION, STORAGE_KEY };
 })();
@@ -514,7 +522,7 @@ const Store = (() => {
   function makeExportFile(state){
     const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
     // File helps iOS share sheet understand what it is
-    return new File([blob], "MovieVaultBackup_v1.8.3.json", { type: "application/json" });
+    return new File([blob], "MovieVaultBackup_v1.8.4.json", { type: "application/json" });
   }
 
   function downloadExport(state){
@@ -684,7 +692,7 @@ const UI = (() => {
           <div class="row"><div class="k">Release</div><div class="v">${esc(m.release || "—")}</div></div>
           <div class="row"><div class="k">Director</div><div class="v">${esc(m.director || "—")}</div></div>
           <div class="row plot"><div class="k">Plot</div><div class="v">${esc(m.plot || "—")}</div></div>
-          
+          <div class="row"><div class="k">Updated</div><div class="v">${esc(new Date(m.updatedAt).toLocaleString())}</div></div>
         </div>
       </div>
     `;
@@ -769,9 +777,9 @@ let editingId = null;
       arr = arr.filter(m =>
         (m.title||"").toLowerCase().includes(q) ||
         (m.director||"").toLowerCase().includes(q) ||
-        (m.release||"").toLowerCase().includes(q) ||
-        (m.plot||"").toLowerCase().includes(q)
-      );
+        (m.release||"").toLowerCase().includes(q)
+      ) ||
+        (m.plot||"").toLowerCase().includes(q);
     }
 
     const byTitle = (a,b) => (a.title||"").localeCompare(b.title||"", undefined, { sensitivity:"base" });
