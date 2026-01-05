@@ -360,7 +360,7 @@
           </div>
           <input id="importFile" class="fileOffscreen" type="file" accept="application/json" />
         </div>
-        <div class="pill" id="versionPill" style="opacity:.9;">v2.0.6</div>
+        <div class="pill" id="versionPill" style="opacity:.9;"></div>
         <div class="pill" id="countPill">0 movies</div>
       </div>
     </header>
@@ -423,6 +423,8 @@
           <label for="director">Director</label>
           <input id="director" placeholder="e.g., Steven Spielberg" autocomplete="off" />
         </div>
+
+        <input id="cast" type="hidden" />
 
         
 
@@ -521,7 +523,7 @@
   <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = "v2.0.6";
+const APP_VERSION = "v2.0.7";
 
   function applyAppVersion(){
     try{
@@ -686,6 +688,7 @@ const Store = (() => {
       title: (m && m.title) ? String(m.title).trim() : "",
       release: (m && m.release) ? String(m.release).trim() : "",
       director: (m && m.director) ? String(m.director).trim() : "",
+      cast: (m && m.cast) ? String(m.cast).trim() : "",
       plot: (m && m.plot) ? String(m.plot).trim() : "",
       poster: (m && m.poster) ? String(m.poster) : "", // data URL (embedded)
       createdAt: (m && m.createdAt) ? Number(m.createdAt) : now,
@@ -753,6 +756,7 @@ const UI = (() => {
     title: document.getElementById("title"),
     release: document.getElementById("release"),
     director: document.getElementById("director"),
+    cast: document.getElementById("cast"),
     plot: document.getElementById("plot"),
     // posters
     posterBtn: document.getElementById("posterBtn"),
@@ -889,6 +893,7 @@ const UI = (() => {
           <div class="chipRow">
             <span class="chip"><span class="k">Year</span>${esc(yearSafe)}</span>
             <span class="chip"><span class="k">Director</span>${esc(m.director || "—")}</span>
+            <span class="chip"><span class="k">Cast</span>${esc(m.cast || "—")}</span>
           </div>
         </div>
       `;
@@ -930,7 +935,7 @@ const UI = (() => {
 
 
   function setVersion(v){
-    if(el.versionPill) el.versionPill.textContent = v ? ("v" + v) : "";
+    if(el.versionPill) el.versionPill.textContent = v || "";
   }
 
   return { el, toast, setVersion, setCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openModal, closeModal };
@@ -1059,6 +1064,7 @@ let editingId = null;
       title,
       release: UI.el.release.value.trim(),
       director: UI.el.director.value.trim(),
+      cast: (UI.el.cast ? UI.el.cast.value.trim() : ""),
       plot: (UI.el.plot ? UI.el.plot.value.trim() : ""),
       poster: currentPoster || "",
       updatedAt: Date.now(),
@@ -1270,6 +1276,7 @@ let editingId = null;
     if(UI.el.title) UI.el.title.value = d.title || typedTitle || UI.el.title.value || "";
     if(UI.el.release) UI.el.release.value = d.release_date || UI.el.release.value || "";
     if(UI.el.director) UI.el.director.value = directorFromTmdb || UI.el.director.value || "";
+    if(UI.el.cast) UI.el.cast.value = castFromTmdb || UI.el.cast.value || "";
 
     if(UI.el.runtime && d.runtime != null) UI.el.runtime.value = String(d.runtime);
     if(UI.el.genre && Array.isArray(d.genres)) UI.el.genre.value = d.genres.map(g => g && g.name).filter(Boolean).join(", ");
