@@ -536,7 +536,7 @@ function getTopCastFromCredits(credits, max = 2) {
     .join(', ');
 }
 
-const APP_VERSION = "v2.0.14";
+const APP_VERSION = "v2.0.15";
 
   function applyAppVersion(){
     try{
@@ -938,6 +938,7 @@ const UI = (() => {
           <div class="row"><div class="k">Title</div><div class="v">${esc(m.title || "—")}</div></div>
           <div class="row"><div class="k">Release</div><div class="v">${esc(prettyRelease || "—")}</div></div>
           <div class="row"><div class="k">Director</div><div class="v">${esc(m.director || "—")}</div></div>
+          <div class="row"><div class="k">Cast</div><div class="v">${esc(m.cast || "—")}</div></div>
           <div class="row plot"><div class="k">Plot</div><div class="v">${esc(m.plot || "—")}</div></div>
         </div>
       </div>
