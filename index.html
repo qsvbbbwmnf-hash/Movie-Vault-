@@ -345,7 +345,7 @@
     <header>
       <div>
         <h1>Movie Vault</h1>
-        <div class="sub" id="buildSubtitle">Plain build — TMDb autofill (build " + APP_VERSION + ")</div>
+        <div class="sub" id="buildSubtitle">Plain build — TMDb autofill</div>
       </div>
       <div class="row" style="gap:10px; align-items:center;">
         <button class="btn small primary" id="addMovieBtn" type="button">Add Movie</button>
@@ -536,7 +536,7 @@ function getTopCastFromCredits(credits, max = 2) {
     .join(', ');
 }
 
-const APP_VERSION = "v2.0.14";
+const APP_VERSION = "v2.0.15";
 
   function applyAppVersion(){
     try{
@@ -557,12 +557,12 @@ function escapeHtml(str){
 /* =========================================================
    Movie Vault (Plain)
    Clean layers: Config • Store • UI • App
-   Manual entry only (no TMDb)
+   Manual entry + TMDb Auto-Fill
    ========================================================= */
 
 /* 1) Config */
 const Config = (() => {
-  const VERSION = "2.0.6";
+  const VERSION = "2.0.15";
   const STORAGE_KEY = "movie_vault_plain_v1"; // fresh start
   return { VERSION, STORAGE_KEY };
 })();
@@ -582,7 +582,7 @@ const Api = (() => {
     }
   }
   function saveKeys(keys){
-    localStorage.setItem(KEY_STORAGE, JSON.stringify({ tmdb: keys.tmdb||"", omdb: keys.omdb||"" }));
+    localStorage.setItem(KEY_STORAGE, JSON.stringify({ tmdb: keys.tmdb||"" }));
   }
   function clearKeys(){ localStorage.removeItem(KEY_STORAGE); }
 
@@ -611,20 +611,6 @@ const Api = (() => {
     if(!r.ok) throw new Error("TMDb details failed.");
     return r.json();
   }
-
-  async function omdbByImdb(imdbId, omdbKey){
-    const params = new URLSearchParams({
-      apikey: omdbKey,
-      i: imdbId,
-      plot: "short"
-    });
-    const url = "https://www.omdbapi.com/?" + params.toString();
-    let r;
-    try{
-      r = await fetch(url, { cache: "no-store" });
-    }catch(e){
-      throw new Error("OMDb network error (check internet/DNS).");
-    }
     if(!r.ok){
       let body = "";
       try{ body = (await r.text() || "").slice(0,120); }catch(_){}
@@ -634,21 +620,6 @@ const Api = (() => {
     if(j && j.Response === "False") throw new Error(j.Error || "OMDb returned no result.");
     return j;
   }
-
-  async function omdbByTitle(title, year, omdbKey){
-    const params = new URLSearchParams({
-      apikey: omdbKey,
-      t: title,
-      plot: "short"
-    });
-    if(year) params.set("y", year);
-    const url = "https://www.omdbapi.com/?" + params.toString();
-    let r;
-    try{
-      r = await fetch(url, { cache: "no-store" });
-    }catch(e){
-      throw new Error("OMDb network error (check internet/DNS).");
-    }
     if(!r.ok){
       let body = "";
       try{ body = (await r.text() || "").slice(0,120); }catch(_){}
@@ -853,6 +824,7 @@ const UI = (() => {
     el.title.value = m.title || "";
     el.release.value = m.release || "";
     el.director.value = m.director || "";
+    if(el.cast) el.cast.value = m.cast || "";
     if(el.plot) el.plot.value = m.plot || "";
   }
   function clearForm(){
@@ -938,6 +910,7 @@ const UI = (() => {
           <div class="row"><div class="k">Title</div><div class="v">${esc(m.title || "—")}</div></div>
           <div class="row"><div class="k">Release</div><div class="v">${esc(prettyRelease || "—")}</div></div>
           <div class="row"><div class="k">Director</div><div class="v">${esc(m.director || "—")}</div></div>
+          <div class="row"><div class="k">Cast</div><div class="v">${esc(m.cast || "—")}</div></div>
           <div class="row plot"><div class="k">Plot</div><div class="v">${esc(m.plot || "—")}</div></div>
         </div>
       </div>
@@ -1024,9 +997,10 @@ let editingId = null;
       arr = arr.filter(m =>
         (m.title||"").toLowerCase().includes(q) ||
         (m.director||"").toLowerCase().includes(q) ||
-        (m.release||"").toLowerCase().includes(q)
-      ) ||
-        (m.plot||"").toLowerCase().includes(q);
+        (m.cast||"").toLowerCase().includes(q) ||
+        (m.release||"").toLowerCase().includes(q) ||
+        (m.plot||"").toLowerCase().includes(q)
+      );
     }
 
     const byTitle = (a,b) => (a.title||"").localeCompare(b.title||"", undefined, { sensitivity:"base" });
@@ -1345,8 +1319,8 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     if(UI.el.keysSheet) UI.el.keysSheet.addEventListener("click", (e) => e.stopPropagation());
     if(UI.el.keysSaveBtn) UI.el.keysSaveBtn.addEventListener("click", () => {
       const tmdb = (UI.el.tmdbKey && UI.el.tmdbKey.value || "").trim();
-      const omdb = "";
-      Api.saveKeys({ tmdb, omdb });
+      
+      Api.saveKeys({ tmdb });
       apiKeys = Api.loadKeys();
       UI.toast("Keys saved.");
       closeKeys();
@@ -1479,7 +1453,7 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
     });
 
     if(UI.el.title) UI.el.title.addEventListener("input", syncSaveEnabled);
-    for(const inp of [UI.el.title, UI.el.release, UI.el.director]){
+    for(const inp of [UI.el.title, UI.el.release, UI.el.director, UI.el.cast].filter(Boolean)){
       inp.addEventListener("keydown", (e) => {
         if(e.key === "Enter"){ e.preventDefault(); saveMovie(); }
       });
