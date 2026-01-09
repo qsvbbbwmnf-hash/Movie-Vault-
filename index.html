@@ -338,6 +338,11 @@
     .pickTitle{ font-weight:900; }
     .pickSub{ color: rgba(255,255,255,.68); font-size:12px; margin-top:2px; }
 
+
+details.castDetails { margin-top: 6px; }
+details.castDetails summary { cursor: pointer; user-select: none; }
+details.castDetails .castFull { margin-top: 6px; line-height: 1.35; }
+
 </style>
 </head>
 <body>
@@ -536,7 +541,7 @@ function getTopCastFromCredits(credits, max = 2) {
     .join(', ');
 }
 
-const APP_VERSION = "v2.0.17";
+const APP_VERSION = "v2.0.18";
 
   function applyAppVersion(){
     try{
@@ -938,7 +943,19 @@ const UI = (() => {
           <div class="row"><div class="k">Title</div><div class="v">${esc(m.title || "—")}</div></div>
           <div class="row"><div class="k">Release</div><div class="v">${esc(prettyRelease || "—")}</div></div>
           <div class="row"><div class="k">Director</div><div class="v">${esc(m.director || "—")}</div></div>
-          <div class="row"><div class="k">Cast</div><div class="v">${esc(m.fullCast || m.cast || "—")}</div></div>
+          <div class="row">
+            <div class="k">Cast</div>
+            <div class="v">
+              ${esc(m.cast || "—")}
+              ${(() => {
+                  const full = (m.fullCast||"").trim();
+                  const teaser = (m.cast||"").trim();
+                  if(!full) return "";
+                  if(full && teaser && full === teaser) return "";
+                  return `<details class="castDetails"><summary>Show full cast</summary><div class="castFull">${esc(full)}</div></details>`;
+                })()}
+            </div>
+          </div>
           <div class="row plot"><div class="k">Plot</div><div class="v">${esc(m.plot || "—")}</div></div>
         </div>
       </div>
