@@ -536,7 +536,7 @@ function getTopCastFromCredits(credits, max = 2) {
     .join(', ');
 }
 
-const APP_VERSION = "v2.0.15";
+const APP_VERSION = "v2.0.16";
 
   function applyAppVersion(){
     try{
@@ -1025,9 +1025,10 @@ let editingId = null;
       arr = arr.filter(m =>
         (m.title||"").toLowerCase().includes(q) ||
         (m.director||"").toLowerCase().includes(q) ||
-        (m.release||"").toLowerCase().includes(q)
-      ) ||
-        (m.plot||"").toLowerCase().includes(q);
+        (m.cast||"").toLowerCase().includes(q) ||
+        (m.release||"").toLowerCase().includes(q) ||
+        (m.plot||"").toLowerCase().includes(q)
+      );
     }
 
     const byTitle = (a,b) => (a.title||"").localeCompare(b.title||"", undefined, { sensitivity:"base" });
