@@ -541,7 +541,7 @@ function getTopCastFromCredits(credits, max = 2) {
     .join(', ');
 }
 
-const APP_VERSION = "v2.0.18";
+const APP_VERSION = "v2.0.19";
 
   function applyAppVersion(){
     try{
@@ -707,6 +707,7 @@ const Store = (() => {
       release: (m && m.release) ? String(m.release).trim() : "",
       director: (m && m.director) ? String(m.director).trim() : "",
       cast: (m && m.cast) ? String(m.cast).trim() : "",
+      fullCast: (m && m.fullCast) ? String(m.fullCast).trim() : "",
       plot: (m && m.plot) ? String(m.plot).trim() : "",
       poster: (m && m.poster) ? String(m.poster) : "", // data URL (embedded)
       createdAt: (m && m.createdAt) ? Number(m.createdAt) : now,
@@ -983,6 +984,8 @@ const App = (() => {
 let editingId = null;
   let modalId = null;
   let currentPoster = "";
+    currentFullCast = "";
+  let currentFullCast = "";
 
   function getMovie(id){ return state.movies.find(x => x.id === id) || null; }
 
@@ -1099,6 +1102,7 @@ let editingId = null;
       cast: (UI.el.cast ? UI.el.cast.value.trim() : ""),
       plot: (UI.el.plot ? UI.el.plot.value.trim() : ""),
       poster: currentPoster || "",
+      fullCast: currentFullCast || "",
       updatedAt: Date.now(),
     });
 
@@ -1310,6 +1314,7 @@ const crew = (tmdbCredits && tmdbCredits.crew) ? tmdbCredits.crew : [];
     if(UI.el.release) UI.el.release.value = d.release_date || UI.el.release.value || "";
     if(UI.el.director) UI.el.director.value = directorFromTmdb || UI.el.director.value || "";
     if(UI.el.cast) UI.el.cast.value = getTopCastFromCredits(tmdbCredits, 2) || UI.el.cast.value || "";
+    currentFullCast = (tmdbCredits && tmdbCredits.cast) ? tmdbCredits.cast.map(c => c.name).join(", ") : (currentFullCast || "");
 
     if(UI.el.runtime && d.runtime != null) UI.el.runtime.value = String(d.runtime);
     if(UI.el.genre && Array.isArray(d.genres)) UI.el.genre.value = d.genres.map(g => g && g.name).filter(Boolean).join(", ");
