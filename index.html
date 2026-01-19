@@ -544,7 +544,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.18";
+const APP_VERSION = "v2.0.19";
 
   function applyAppVersion(){
     try{
@@ -916,9 +916,7 @@ const UI = (() => {
           <div class="title">${esc(m.title || "(Untitled)")}</div>
           <div class="chipRow">
             <span class="chip"><span class="k">Year</span>${esc(yearSafe)}</span>
-            <span class="chip"><span class="k">Director</span>${esc(m.director || "—")}</span>
-            <span class="chip"><span class="k">Cast</span>${esc(m.cast || "—")}</span>
-          </div>
+            <span class="chip"><span class="k">Director</span>${esc(m.director || "—")}</span>          </div>
         </div>
       `;
       el.list.appendChild(div);
