@@ -544,7 +544,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.20";
+const APP_VERSION = "v2.0.21";
 
   function applyAppVersion(){
     try{
@@ -915,7 +915,6 @@ const UI = (() => {
         <div>
           <div class="title">${esc(m.title || "(Untitled)")}</div>
           <div class="meta"><b>${esc(yearSafe)}</b></div>
-          <div class="meta">${esc(m.director || "—")}</div>
         </div>
       `;
       el.list.appendChild(div);
