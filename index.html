@@ -222,6 +222,20 @@
     }
     .toast.show{ display:block; }
 
+    .toast .twrap{ display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; }
+    .toast .tbtn{
+      padding:7px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.22);
+      background: rgba(216,27,96,.85);
+      color: rgba(255,255,255,.95);
+      font-weight:900;
+      cursor:pointer;
+      font-size:12px;
+    }
+    .toast .tbtn:active{ transform: scale(.98); }
+
+
     .file{ display:none; }
 
     /* iOS Safari/WebView: file inputs cannot be display:none if you want .click() to open picker */
@@ -549,7 +563,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.23";
+const APP_VERSION = "v2.0.24";
 
   function applyAppVersion(){
     try{
@@ -839,10 +853,27 @@ const UI = (() => {
 
   let toastTimer = null;
   function toast(msg){
+    // plain text toast
     el.toast.textContent = msg;
     el.toast.classList.add("show");
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => el.toast.classList.remove("show"), 2200);
+  }
+
+  function toastAction(msg, actionLabel, onAction, ms=5000){
+    // toast with a single action button (e.g., Undo)
+    clearTimeout(toastTimer);
+    el.toast.innerHTML = `<span class="twrap"><span>${esc(msg)}</span><button type="button" class="tbtn">${esc(actionLabel||'OK')}</button></span>`;
+    const btn = el.toast.querySelector('.tbtn');
+    if(btn){
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        try{ onAction && onAction(); }catch(_){ }
+        el.toast.classList.remove("show");
+      }, { once:true });
+    }
+    el.toast.classList.add("show");
+    toastTimer = setTimeout(() => el.toast.classList.remove("show"), ms);
   }
 
   function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
@@ -964,7 +995,7 @@ const UI = (() => {
     if(el.versionPill) el.versionPill.textContent = v || "";
   }
 
-  return { el, toast, setVersion, setCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openModal, closeModal };
+  return { el, toast, toastAction, setVersion, setCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openModal, closeModal };
 })();
 
 /* 4) App */
@@ -979,6 +1010,40 @@ let editingId = null;
   let modalId = null;
   let currentPoster = "";
   let currentFullCast = "";
+
+  let lastDeleted = null;
+  let undoTimer = null;
+
+  function clearUndo(){
+    lastDeleted = null;
+    if(undoTimer){ clearTimeout(undoTimer); undoTimer = null; }
+  }
+
+  function offerUndo(deletedMovie, index){
+    clearUndo();
+    lastDeleted = { movie: deletedMovie, index: index };
+    UI.toastAction('Deleted.', 'Undo', () => {
+      if(!lastDeleted) return;
+      const pos = Math.max(0, Math.min(state.movies.length, lastDeleted.index));
+      state.movies.splice(pos, 0, lastDeleted.movie);
+      state.appVersion = APP_VERSION;
+      Store.save(state);
+      clearUndo();
+      render();
+      UI.toast('Restored.');
+    }, 5000);
+    undoTimer = setTimeout(() => { clearUndo(); }, 5000);
+  }
+
+  function deleteMovieById(id){
+    const idx = state.movies.findIndex(x => x.id === id);
+    if(idx < 0) return { deleted:null, index:-1 };
+    const deleted = state.movies[idx];
+    state.movies.splice(idx, 1);
+    state.appVersion = APP_VERSION;
+    Store.save(state);
+    return { deleted, index: idx };
+  }
 
   function getMovie(id){ return state.movies.find(x => x.id === id) || null; }
 
@@ -1118,15 +1183,15 @@ let editingId = null;
   }
 
   function deleteMovie(){
-    if(!editingId){ UI.toast("Nothing to delete."); return; }
+    if(!editingId){ UI.toast('Nothing to delete.'); return; }
     const m = getMovie(editingId);
-    if(!m){ UI.toast("Nothing to delete."); return; }
+    if(!m){ UI.toast('Nothing to delete.'); return; }
     if(!confirm(`Delete "${m.title}"?`)) return;
-    state.movies = state.movies.filter(x => x.id !== m.id);
+    const out = deleteMovieById(m.id);
     resetForm();
     render();
     UI.closeFormModal();
-    UI.toast("Deleted.");
+    if(out.deleted) offerUndo(out.deleted, out.index);
   }
 
   function openModal(id){
@@ -1453,14 +1518,12 @@ UI.el.modalDeleteBtn.addEventListener("click", (e) => {
       const m = getMovie(modalId);
       if(!m) return;
       if(!confirm(`Delete "${m.title}"?`)) return;
-      state.movies = state.movies.filter(x => x.id !== m.id);
-      state.appVersion = APP_VERSION;
-      Store.save(state);
+      const out = deleteMovieById(m.id);
       modalId = null;
       UI.closeModal();
       resetForm();
       render();
-      UI.toast("Deleted.");
+      if(out.deleted) offerUndo(out.deleted, out.index);
     });
 if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => {
       closeToolsMenu();
