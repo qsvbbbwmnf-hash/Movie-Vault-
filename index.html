@@ -116,20 +116,24 @@
 
     .list{
       display:grid;
-      gap:12px;
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap:10px;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    }
+    /* Force a true 4-column feel on wide screens */
+    @media (min-width: 960px){
+      .list{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
     }
     @media (max-width: 520px){ .list{ grid-template-columns: 1fr; } }
     .item{
       border:1px solid rgba(255,255,255,.12);
-      border-radius: 16px;
+      border-radius: 14px;
       background: rgba(0,0,0,.18);
-      padding:12px;
+      padding:8px 10px;
       cursor:pointer;
       display:grid;
-      grid-template-columns: 56px 1fr;
-      gap:12px;
-      align-items:start;
+      grid-template-columns: 48px 1fr;
+      gap:10px;
+      align-items:center;
       transition: transform .12s ease, background .12s ease, border-color .12s ease;
     }
     .item:hover{
@@ -140,7 +144,7 @@
     .item:active{
       transform: translateY(0px) scale(.995);
     }
-    .title{ font-weight:900; margin:0 0 4px; font-size:14px; letter-spacing:.2px; }
+    .title{ font-weight:900; margin:0 0 2px; font-size:13px; letter-spacing:.2px; }
     .meta{ color:var(--muted); font-size:12px; line-height:1.25; }
     .meta b{ color:rgba(255,255,255,.82); font-weight:800; }
 
@@ -160,12 +164,12 @@
     /* Posters */
     .item{
       display:grid;
-      grid-template-columns: 56px 1fr;
+      grid-template-columns: 48px 1fr;
       gap:10px;
-      align-items:start;
+      align-items:center;
     }
     .thumb{
-      width:56px; height:76px;
+      width:48px; height:64px;
       border-radius: 10px;
       border:1px solid rgba(255,255,255,.12);
       background: rgba(255,255,255,.06);
@@ -197,8 +201,8 @@
       object-fit: cover;
     }
     @media (max-width: 520px){
-      .item{ grid-template-columns: 48px 1fr; }
-      .thumb{ width:48px; height:64px; }
+      .item{ grid-template-columns: 44px 1fr; }
+      .thumb{ width:44px; height:58px; }
       .modalPoster{ width: min(160px, 44vw); }
     }
 
@@ -545,7 +549,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.22";
+const APP_VERSION = "v2.0.23";
 
   function applyAppVersion(){
     try{
