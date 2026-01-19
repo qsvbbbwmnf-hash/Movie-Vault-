@@ -528,7 +528,7 @@
 
 <script>
 
-function getTopCastFromCredits(credits, max = 2) {
+function getTopCastFromCredits(credits, max = 3) {
   if (!credits || !credits.cast) return '';
   return credits.cast
     .slice(0, max)
@@ -536,7 +536,15 @@ function getTopCastFromCredits(credits, max = 2) {
     .join(', ');
 }
 
-const APP_VERSION = "v2.0.17";
+function getFullCastFromCredits(credits, max = 15) {
+  if (!credits || !credits.cast) return "";
+  return credits.cast
+    .slice(0, max)
+    .map(c => c.name)
+    .join(", ");
+}
+
+const APP_VERSION = "v2.0.18";
 
   function applyAppVersion(){
     try{
@@ -702,6 +710,7 @@ const Store = (() => {
       release: (m && m.release) ? String(m.release).trim() : "",
       director: (m && m.director) ? String(m.director).trim() : "",
       cast: (m && m.cast) ? String(m.cast).trim() : "",
+      fullCast: (m && m.fullCast) ? String(m.fullCast).trim() : "",
       plot: (m && m.plot) ? String(m.plot).trim() : "",
       poster: (m && m.poster) ? String(m.poster) : "", // data URL (embedded)
       createdAt: (m && m.createdAt) ? Number(m.createdAt) : now,
@@ -853,12 +862,14 @@ const UI = (() => {
     el.title.value = m.title || "";
     el.release.value = m.release || "";
     el.director.value = m.director || "";
+    if(el.cast) el.cast.value = m.cast || "";
     if(el.plot) el.plot.value = m.plot || "";
   }
   function clearForm(){
     el.title.value = "";
     el.release.value = "";
     el.director.value = "";
+    if(el.cast) el.cast.value = "";
     if(el.plot) el.plot.value = "";
     if(el.posterPreview){
       el.posterPreview.src = "";
@@ -966,6 +977,7 @@ const App = (() => {
 let editingId = null;
   let modalId = null;
   let currentPoster = "";
+  let currentFullCast = "";
 
   function getMovie(id){ return state.movies.find(x => x.id === id) || null; }
 
@@ -1058,6 +1070,7 @@ let editingId = null;
   function resetForm(){
     editingId = null;
     setPoster("");
+    currentFullCast = "";
     UI.clearForm();
     UI.setEditMode(false);
     if(UI.el.saveBtn) UI.el.saveBtn.disabled = true;
@@ -1080,6 +1093,7 @@ let editingId = null;
       release: UI.el.release.value.trim(),
       director: UI.el.director.value.trim(),
       cast: (UI.el.cast ? UI.el.cast.value.trim() : ""),
+      fullCast: (currentFullCast || (UI.el.cast ? UI.el.cast.value.trim() : "")),
       plot: (UI.el.plot ? UI.el.plot.value.trim() : ""),
       poster: currentPoster || "",
       updatedAt: Date.now(),
@@ -1129,6 +1143,7 @@ let editingId = null;
     UI.setEditMode(true);
     UI.fillForm(m);
     setPoster(m.poster || "");
+    currentFullCast = (m.fullCast || m.cast || "");
     UI.closeModal();
     UI.openFormModal();
     UI.el.title && UI.el.title.focus();
@@ -1292,7 +1307,8 @@ const crew = (tmdbCredits && tmdbCredits.crew) ? tmdbCredits.crew : [];
     if(UI.el.title) UI.el.title.value = d.title || typedTitle || UI.el.title.value || "";
     if(UI.el.release) UI.el.release.value = d.release_date || UI.el.release.value || "";
     if(UI.el.director) UI.el.director.value = directorFromTmdb || UI.el.director.value || "";
-    if(UI.el.cast) UI.el.cast.value = getTopCastFromCredits(tmdbCredits, 2) || UI.el.cast.value || "";
+    if(UI.el.cast) UI.el.cast.value = getTopCastFromCredits(tmdbCredits, 3) || UI.el.cast.value || "";
+    currentFullCast = getFullCastFromCredits(tmdbCredits, 15) || UI.el.cast.value || "";
 
     if(UI.el.runtime && d.runtime != null) UI.el.runtime.value = String(d.runtime);
     if(UI.el.genre && Array.isArray(d.genres)) UI.el.genre.value = d.genres.map(g => g && g.name).filter(Boolean).join(", ");
@@ -1481,6 +1497,7 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
     });
 
     if(UI.el.title) UI.el.title.addEventListener("input", syncSaveEnabled);
+    if(UI.el.cast) UI.el.cast.addEventListener("input", () => { currentFullCast = UI.el.cast.value.trim(); });
     for(const inp of [UI.el.title, UI.el.release, UI.el.director]){
       inp.addEventListener("keydown", (e) => {
         if(e.key === "Enter"){ e.preventDefault(); saveMovie(); }
@@ -1505,4 +1522,3 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
 </script>
 </body>
 </html>
-
