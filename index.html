@@ -394,7 +394,7 @@
             <select id="sort" class="btn small" style="padding:9px 10px;">
               <option value="added_desc">Newest</option>
               <option value="added_asc">Oldest</option>
-              <option value="title_asc">Title A→Z</option>
+              <option value="title_asc" selected>Title A→Z</option>
               <option value="title_desc">Title Z→A</option>
               <option value="release_desc">Release ↓</option>
               <option value="release_asc">Release ↑</option>
@@ -563,7 +563,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.25";
+const APP_VERSION = "v2.0.26";
 
   function applyAppVersion(){
     try{
@@ -1573,8 +1573,8 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
         if(e.key === "Enter"){ e.preventDefault(); saveMovie(); }
       });
     }
-
     resetForm();
+    if(UI.el.sort) UI.el.sort.value = 'title_asc';
     render();
     syncSaveEnabled();
   }
