@@ -124,6 +124,46 @@
       .list{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
     }
     @media (max-width: 520px){ .list{ grid-template-columns: 1fr; } }
+
+    .azBar{
+      position: sticky;
+      top: 6px;
+      z-index: 120;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px 8px;
+      margin: 0 0 10px;
+      background: rgba(11,13,18,.92);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 14px;
+      backdrop-filter: blur(8px);
+    }
+    .azBtn{
+      min-width: 28px;
+      height: 28px;
+      padding: 0 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      font-weight: 800;
+      font-size: 12px;
+      letter-spacing: .2px;
+      cursor: pointer;
+      line-height: 26px;
+      user-select: none;
+    }
+    .azBtn:hover{ background: rgba(255,255,255,.10); }
+    .azBtn.active{
+      background: rgba(216,27,96,.85);
+      border-color: rgba(216,27,96,.55);
+    }
+    .azBtn.disabled{
+      opacity: .30;
+      pointer-events: none;
+    }
+
     .item{
       border:1px solid rgba(255,255,255,.12);
       border-radius: 14px;
@@ -402,6 +442,7 @@
           </div>
         </div>
         <div class="bd">
+          <div id="azBar" class="azBar" aria-label="A to Z jump bar"></div>
           <div id="list" class="list"></div>
           <div id="empty" class="hint" style="display:none; padding:10px 2px;">
             Empty vault. Add your first movie on the left.
@@ -563,7 +604,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.26";
+const APP_VERSION = "v2.0.28";
 
   function applyAppVersion(){
     try{
@@ -839,6 +880,7 @@ const UI = (() => {
     pickSheet: document.getElementById("pickSheet"),
     pickCloseBtn: document.getElementById("pickCloseBtn"),
     pickList: document.getElementById("pickList"),
+    azBar: document.getElementById("azBar"),
     toast: document.getElementById("toast"),
     // modal
     modal: document.getElementById("modal"),
@@ -957,6 +999,23 @@ const UI = (() => {
     }
   }
 
+
+
+  function renderAZBar(enabledSet, activeLetter){
+    if(!el.azBar) return;
+    const letters = [];
+    for(let i=65;i<=90;i++) letters.push(String.fromCharCode(i));
+    letters.push('#');
+
+    const btns = letters.map(L => {
+      const enabled = enabledSet && enabledSet.has(L);
+      const cls = ["azBtn", enabled?"":"disabled", (activeLetter===L)?"active":""].filter(Boolean).join(" ");
+      return `<button class="${cls}" type="button" data-letter="${L}" aria-label="Jump to ${L}">${L}</button>`;
+    }).join("");
+
+    el.azBar.innerHTML = btns;
+  }
+
   function openFormModal(){ el.formModal.classList.add("open"); }
   function closeFormModal(){ el.formModal.classList.remove("open"); }
 
@@ -1001,6 +1060,52 @@ const UI = (() => {
 /* 4) App */
 const App = (() => {
   let state = Store.load();
+
+  // Sticky A–Z jump bar support
+  let lastRendered = [];
+  let activeAZ = null;
+
+  function titleKeyNoArticles(t){
+    const s = String(t || '').trim();
+    // Ignore leading articles for navigation & sorting parity: The / A / An
+    return s.replace(/^(the|a|an)\s+/i, '').trim();
+  }
+
+  function letterKeyFromTitle(t){
+    const s = titleKeyNoArticles(t);
+    const ch = (s[0] || '').toUpperCase();
+    if(ch >= 'A' && ch <= 'Z') return ch;
+    return '#';
+  }
+
+  function updateAZBar(){
+    if(!UI.el.azBar) return;
+    const enabled = new Set();
+    for(const m of lastRendered){ enabled.add(letterKeyFromTitle(m.title)); }
+    if(!activeAZ || !enabled.has(activeAZ)){
+      activeAZ = lastRendered.length ? letterKeyFromTitle(lastRendered[0].title) : null;
+    }
+    UI.renderAZBar(enabled, activeAZ);
+  }
+
+  function jumpToLetter(letter){
+    const L = String(letter || '').toUpperCase();
+    if(!L) return;
+    const m = lastRendered.find(x => letterKeyFromTitle(x.title) === L);
+    if(!m) return;
+
+    const target = UI.el.list.querySelector(`.item[data-id="${m.id}"]`);
+    if(!target) return;
+
+    activeAZ = L;
+    updateAZBar();
+
+    const barH = UI.el.azBar ? UI.el.azBar.getBoundingClientRect().height : 0;
+    const rect = target.getBoundingClientRect();
+    const top = rect.top + window.scrollY - (barH + 16);
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  }
+
   let apiKeys = Api.loadKeys();
   
     // Version stamp
@@ -1134,7 +1239,9 @@ let editingId = null;
 
   function render(){
     const arr = getFilteredSorted();
+    lastRendered = arr;
     UI.renderList(arr);
+    updateAZBar();
     UI.setCount(arr.length);
     persist();
   }
@@ -1496,6 +1603,14 @@ UI.el.deleteBtn.addEventListener("click", deleteMovie);
 
     UI.el.q.addEventListener("input", render);
     UI.el.sort.addEventListener("change", render);
+
+    if(UI.el.azBar){
+      UI.el.azBar.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-letter]");
+        if(!btn || btn.classList.contains("disabled")) return;
+        jumpToLetter(btn.dataset.letter);
+      });
+    }
 
     UI.el.list.addEventListener("click", (e) => {
       const card = e.target.closest(".item");
