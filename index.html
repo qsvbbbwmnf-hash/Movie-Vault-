@@ -148,44 +148,6 @@
     .meta{ color:var(--muted); font-size:12px; line-height:1.25; }
     .meta b{ color:rgba(255,255,255,.82); font-weight:800; }
 
-    /* A–Z jump bar (index tabs) */
-    .azBar{
-      position: sticky;
-      top: 0;
-      z-index: 980;
-      display:flex;
-      flex-wrap:wrap;
-      gap:6px;
-      padding:10px 2px 12px;
-      margin: 0 0 10px;
-      background: rgba(11,13,18,.92);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border-bottom:1px solid rgba(255,255,255,.08);
-    }
-    .azBtn{
-      padding:6px 8px;
-      min-width: 28px;
-      border-radius: 999px;
-      border:1px solid rgba(255,255,255,.14);
-      background: rgba(255,255,255,.04);
-      color: rgba(255,255,255,.82);
-      font-size:12px;
-      font-weight: 900;
-      letter-spacing: .2px;
-      line-height: 1;
-      cursor:pointer;
-      user-select:none;
-    }
-    .azBtn:hover{ background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.22); }
-    .azBtn:active{ transform: scale(.98); }
-    .azBtn.dim{ opacity:.35; cursor:not-allowed; }
-    .azBtn.active{
-      background: rgba(216,27,96,.22);
-      border-color: rgba(216,27,96,.55);
-      color: rgba(255,255,255,.92);
-    }
-
     .chipRow{ display:flex; gap:8px; flex-wrap:wrap; margin-top:2px; }
     .chip{
       border:1px solid rgba(255,255,255,.12);
@@ -440,7 +402,6 @@
           </div>
         </div>
         <div class="bd">
-          <div id="azBar" class="azBar" aria-label="Jump to letter"></div>
           <div id="list" class="list"></div>
           <div id="empty" class="hint" style="display:none; padding:10px 2px;">
             Empty vault. Add your first movie on the left.
@@ -850,7 +811,6 @@ const UI = (() => {
     q: document.getElementById("q"),
     sort: document.getElementById("sort"),
     list: document.getElementById("list"),
-    azBar: document.getElementById("azBar"),
     empty: document.getElementById("empty"),
     versionPill: document.getElementById("versionPill"),
     countPill: document.getElementById("countPill"),
@@ -918,28 +878,6 @@ const UI = (() => {
 
   function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
 
-  // Library-style title key (ignore leading The/A/An)
-  function normalizeTitleForIndex(title){
-    const raw = String(title || "").trim();
-    if(!raw) return "";
-    // Strip leading quotes/punct/spaces
-    let t = raw.replace(/^[^A-Za-z0-9]+/g, "");
-    // Strip common articles
-    t = t.replace(/^(the|an|a)\s+/i, "");
-    t = t.replace(/^[^A-Za-z0-9]+/g, "");
-    return t.trim();
-  }
-
-  function letterKeyForTitle(title){
-    const t = normalizeTitleForIndex(title);
-    if(!t) return "#";
-    const ch = t[0] || "";
-    if(/[0-9]/.test(ch)) return "#";
-    const up = ch.toUpperCase();
-    if(/[A-Z]/.test(up)) return up;
-    return "#";
-  }
-
   function formatReleaseDate(dateStr){
     if(!dateStr) return "—";
     const d = new Date(dateStr);
@@ -997,19 +935,10 @@ const UI = (() => {
   function renderList(movies){
     el.list.innerHTML = "";
     el.empty.style.display = movies.length ? "none" : "block";
-    const seen = new Set();
     for(const m of movies){
       const div = document.createElement("div");
       div.className = "item";
       div.dataset.id = m.id;
-
-      const lk = letterKeyForTitle(m.title || "");
-      div.dataset.letter = lk;
-      if(!seen.has(lk)){
-        // Anchor for jump bar
-        div.id = `jump_${lk}`;
-        seen.add(lk);
-      }
       const thumb = m.poster
         ? `<img class="thumb" alt="Poster" src="${esc(m.poster)}" />`
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
@@ -1066,7 +995,7 @@ const UI = (() => {
     if(el.versionPill) el.versionPill.textContent = v || "";
   }
 
-  return { el, toast, toastAction, setVersion, setCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, letterKeyForTitle, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openModal, closeModal };
+  return { el, toast, toastAction, setVersion, setCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openModal, closeModal };
 })();
 
 /* 4) App */
@@ -1180,7 +1109,13 @@ let editingId = null;
       );
     }
 
-    const byTitle = (a,b) => (a.title||"").localeCompare(b.title||"", undefined, { sensitivity:"base" });
+    const titleSortKey = (t) => {
+      const s = String(t || '').trim();
+      // Ignore leading articles for sorting only: The / A / An
+      return s.replace(/^(the|a|an)\s+/i, '').trim();
+    };
+
+    const byTitle = (a,b) => titleSortKey(a.title).localeCompare(titleSortKey(b.title), undefined, { sensitivity:"base" });
     const byRelease = (a,b) => (a.release||"").localeCompare(b.release||"");
     const byAdded = (a,b) => (a.createdAt||0) - (b.createdAt||0);
 
@@ -1197,67 +1132,9 @@ let editingId = null;
 
   function persist(){ Store.save(state); }
 
-  // A–Z jump bar
-  const AZ = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".split("");
-  const azButtons = new Map();
-  let activeAz = null;
-
-  function initAzBar(){
-    const bar = UI.el.azBar;
-    if(!bar || azButtons.size) return;
-    bar.innerHTML = "";
-    for(const ch of AZ){
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "azBtn";
-      b.textContent = ch;
-      b.dataset.letter = ch;
-      b.addEventListener("click", () => {
-        if(b.classList.contains("dim")) return;
-        scrollToLetter(ch);
-      });
-      azButtons.set(ch, b);
-      bar.appendChild(b);
-    }
-  }
-
-  function updateAzBar(movies){
-    if(!UI.el.azBar) return;
-    const present = new Set();
-    for(const m of movies){
-      present.add(UI.letterKeyForTitle(m.title || ""));
-    }
-    for(const ch of AZ){
-      const b = azButtons.get(ch);
-      if(!b) continue;
-      b.classList.toggle("dim", !present.has(ch));
-    }
-    // If the active letter disappears due to search/filter, clear highlight
-    if(activeAz && !present.has(activeAz)) setActiveAz(null);
-  }
-
-  function setActiveAz(ch){
-    if(activeAz && azButtons.get(activeAz)) azButtons.get(activeAz).classList.remove("active");
-    activeAz = ch;
-    if(activeAz && azButtons.get(activeAz)) azButtons.get(activeAz).classList.add("active");
-  }
-
-  function scrollToLetter(ch){
-    const target = document.getElementById(`jump_${ch}`);
-    if(!target) return;
-    setActiveAz(ch);
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
-    // Offset so the first card isn't hidden behind the sticky A–Z bar
-    const bar = UI.el.azBar;
-    const off = bar ? Math.ceil(bar.getBoundingClientRect().height) + 10 : 60;
-    window.scrollBy({ top: -off, left: 0, behavior: "smooth" });
-  }
-
   function render(){
     const arr = getFilteredSorted();
-    initAzBar();
     UI.renderList(arr);
-    updateAzBar(arr);
     UI.setCount(arr.length);
     persist();
   }
