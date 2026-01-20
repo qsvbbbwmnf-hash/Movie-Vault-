@@ -604,7 +604,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.28";
+const APP_VERSION = "v2.0.29";
 
   function applyAppVersion(){
     try{
@@ -1054,7 +1054,7 @@ const UI = (() => {
     if(el.versionPill) el.versionPill.textContent = v || "";
   }
 
-  return { el, toast, toastAction, setVersion, setCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openModal, closeModal };
+  return { el, toast, toastAction, setVersion, setCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, renderAZBar, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openModal, closeModal };
 })();
 
 /* 4) App */
