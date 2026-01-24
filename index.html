@@ -153,12 +153,16 @@
       cursor: pointer;
       line-height: 26px;
       user-select: none;
+      transition: background .15s ease, border-color .15s ease, transform .12s ease;
     }
     .azBtn:hover{ background: rgba(255,255,255,.10); }
     .azBtn.active{
       background: rgba(216,27,96,.85);
       border-color: rgba(216,27,96,.55);
     }
+    .azBtn:active{ transform: scale(.96); }
+    .azBtn.tapPulse{ animation: azPop .22s ease; }
+    @keyframes azPop{ 0%{transform:scale(1);} 55%{transform:scale(1.08);} 100%{transform:scale(1);} }
     .azBtn.disabled{
       opacity: .30;
       pointer-events: none;
@@ -604,7 +608,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.29";
+const APP_VERSION = "v2.0.30";
 
   function applyAppVersion(){
     try{
@@ -1064,6 +1068,9 @@ const App = (() => {
   // Sticky A–Z jump bar support
   let lastRendered = [];
   let activeAZ = null;
+  let lastAzSig = "";
+  let lastAzActive = "";
+  let scrollSpyRaf = 0;
 
   function titleKeyNoArticles(t){
     const s = String(t || '').trim();
@@ -1082,13 +1089,66 @@ const App = (() => {
     if(!UI.el.azBar) return;
     const enabled = new Set();
     for(const m of lastRendered){ enabled.add(letterKeyFromTitle(m.title)); }
+
     if(!activeAZ || !enabled.has(activeAZ)){
       activeAZ = lastRendered.length ? letterKeyFromTitle(lastRendered[0].title) : null;
     }
+
+    const sig = Array.from(enabled).sort().join("");
+    const act = activeAZ || "";
+    if(sig === lastAzSig && act === lastAzActive) return;
+    lastAzSig = sig; lastAzActive = act;
+
     UI.renderAZBar(enabled, activeAZ);
   }
 
-  function jumpToLetter(letter){
+  function pulseAZ(letter){
+    if(!UI.el.azBar) return;
+    const btn = UI.el.azBar.querySelector(`button[data-letter="${letter}"]`);
+    if(!btn) return;
+    btn.classList.remove("tapPulse");
+    // force reflow so animation can replay
+    void btn.offsetWidth;
+    btn.classList.add("tapPulse");
+    window.setTimeout(() => btn.classList.remove("tapPulse"), 260);
+  }
+
+  function updateActiveFromScroll(){
+    scrollSpyRaf = 0;
+    if(!UI.el.azBar || !UI.el.list) return;
+    const items = UI.el.list.querySelectorAll(".item");
+    if(!items.length) return;
+
+    const barRect = UI.el.azBar.getBoundingClientRect();
+    const topLine = barRect.bottom + 8;
+
+    let found = null;
+    for(let i=0;i<items.length;i++){
+      const r = items[i].getBoundingClientRect();
+      if(r.bottom > topLine){
+        found = items[i];
+        break;
+      }
+    }
+    if(!found) found = items[items.length-1];
+
+    const id = found.dataset.id;
+    const m = lastRendered.find(x => String(x.id) === String(id));
+    if(!m) return;
+
+    const L = letterKeyFromTitle(m.title);
+    if(L && L !== activeAZ){
+      activeAZ = L;
+      updateAZBar();
+    }
+  }
+
+  function scheduleScrollSpy(){
+    if(scrollSpyRaf) return;
+    scrollSpyRaf = requestAnimationFrame(updateActiveFromScroll);
+  }
+
+  function jumpToLetterfunction jumpToLetter(letter){
     const L = String(letter || '').toUpperCase();
     if(!L) return;
     const m = lastRendered.find(x => letterKeyFromTitle(x.title) === L);
@@ -1099,6 +1159,7 @@ const App = (() => {
 
     activeAZ = L;
     updateAZBar();
+    pulseAZ(L);
 
     const barH = UI.el.azBar ? UI.el.azBar.getBoundingClientRect().height : 0;
     const rect = target.getBoundingClientRect();
@@ -1242,6 +1303,7 @@ let editingId = null;
     lastRendered = arr;
     UI.renderList(arr);
     updateAZBar();
+    scheduleScrollSpy();
     UI.setCount(arr.length);
     persist();
   }
@@ -1610,6 +1672,10 @@ UI.el.deleteBtn.addEventListener("click", deleteMovie);
         if(!btn || btn.classList.contains("disabled")) return;
         jumpToLetter(btn.dataset.letter);
       });
+    // Scroll spy: keep A–Z highlight in sync while scrolling
+    window.addEventListener("scroll", scheduleScrollSpy, { passive: true });
+    window.addEventListener("resize", scheduleScrollSpy);
+
     }
 
     UI.el.list.addEventListener("click", (e) => {
