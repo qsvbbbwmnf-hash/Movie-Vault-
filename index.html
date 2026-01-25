@@ -415,6 +415,52 @@
     .pickTitle{ font-weight:900; }
     .pickSub{ color: rgba(255,255,255,.68); font-size:12px; margin-top:2px; }
 
+
+    /* Collections */
+    .collectionsGrid{
+      display:grid;
+      gap:10px;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    }
+    @media (min-width: 960px){
+      .collectionsGrid{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    .collectionCard{
+      border:1px solid rgba(255,255,255,.12);
+      border-radius: 14px;
+      background: rgba(0,0,0,.18);
+      padding:10px 10px;
+      cursor:pointer;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      transition: transform .12s ease, background .12s ease, border-color .12s ease;
+      user-select:none;
+    }
+    .collectionCard:hover{
+      background: rgba(255,255,255,.06);
+      border-color: rgba(255,255,255,.22);
+      transform: translateY(-1px);
+    }
+    .collectionArt{
+      width:44px; height:44px;
+      border-radius: 12px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      object-fit: cover;
+      flex: 0 0 auto;
+    }
+    .collectionArt.ph{
+      display:grid; place-items:center;
+      color: rgba(255,255,255,.55);
+      font-size:10px;
+      text-align:center;
+      line-height:1.1;
+      padding:6px;
+    }
+    .collectionName{ font-weight:900; font-size:13px; }
+    .collectionCount{ color:var(--muted); font-size:12px; margin-top:2px; }
+
 </style>
 </head>
 <body>
@@ -426,6 +472,7 @@
       </div>
       <div class="row" style="gap:10px; align-items:center;">
         <button class="btn small primary" id="addMovieBtn" type="button">Add Movie</button>
+        <button class="btn small ghost" id="collectionsBtn" type="button">Collections</button>
         <div class="vsep" aria-hidden="true"></div>
         <div class="toolsWrap" style="position:relative;">
           <button class="btn small ghost" id="toolsBtn" type="button" aria-haspopup="true" aria-expanded="false">Vault Backup ▾</button>
@@ -502,7 +549,16 @@
           <input id="director" placeholder="e.g., Steven Spielberg" autocomplete="off" />
         </div>
 
+        
         <div>
+          <label for="collectionSelect">Collection (optional)</label>
+          <select id="collectionSelect" class="btn" style="width:100%; padding:12px;">
+            <option value="">None</option>
+          </select>
+          <div class="hint">Tip: Collections are folders (Rocky, Alien, etc.). You can manage them in the Collections screen.</div>
+        </div>
+
+<div>
           <label for="cast">Cast (optional)</label>
           <input id="cast" placeholder="e.g., Sigourney Weaver, Tom Skerritt" autocomplete="off" />
           <div class="hint">Auto-Fill adds the top cast; you can edit it here.</div>
@@ -602,6 +658,103 @@
     </div>
   </div>
 
+
+  <!-- Collections modal -->
+  <div class="modal" id="collectionsModal" role="dialog" aria-modal="true" aria-label="Collections">
+    <div class="sheet" id="collectionsSheet">
+      <div class="top">
+        <div style="min-width:0;">
+          <div style="font-weight:900; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="collectionsTopTitle">Collections</div>
+          <div style="color:rgba(255,255,255,.68); font-size:12px;" id="collectionsTopSub">Folders for franchises and series.</div>
+        </div>
+        <div class="row">
+          <button class="btn small ghost" id="collectionsBackBtn" type="button" style="display:none;">Back</button>
+          <button class="btn small ghost" id="collectionsCloseBtn" type="button">Close</button>
+        </div>
+      </div>
+      <div class="body">
+
+        <!-- List view -->
+        <div id="collectionsListView">
+          <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:10px; gap:10px; flex-wrap:wrap;">
+            <div class="hint" style="margin:0;">Create folders like “Rocky”, “Alien”, “Bond”, etc.</div>
+            <button class="btn small primary" id="newCollectionBtn" type="button">New Collection</button>
+          </div>
+          <div id="collectionsGrid" class="collectionsGrid"></div>
+          <div id="collectionsEmpty" class="hint" style="display:none; padding:10px 2px;">No collections yet.</div>
+        </div>
+
+        <!-- Detail view -->
+        <div id="collectionDetailView" class="stack" style="display:none;">
+          <div class="row" style="gap:10px; align-items:center; flex-wrap:wrap;">
+            <div class="grow" style="min-width:220px;">
+              <div style="font-weight:900; font-size:14px;" id="collectionNameTitle">—</div>
+              <div class="hint" id="collectionCountHint">—</div>
+            </div>
+            <button class="btn small ghost" id="collectionEditBtn" type="button">Edit</button>
+          </div>
+
+          <div class="row" style="gap:10px;">
+            <button class="btn small primary grow" id="collectionAddExistingBtn" type="button">Add Existing</button>
+            <button class="btn small ghost grow" id="collectionAddNewBtn" type="button">Add New</button>
+          </div>
+
+          <div class="row" style="gap:10px;">
+            <input id="collectionQ" placeholder="Search within this collection…" class="grow" />
+            <select id="collectionSort" class="btn small" style="padding:9px 10px;">
+              <option value="custom" selected>Collection Order</option>
+              <option value="release_asc">Release ↑</option>
+              <option value="release_desc">Release ↓</option>
+              <option value="title_asc">Title A→Z</option>
+              <option value="title_desc">Title Z→A</option>
+            </select>
+          </div>
+
+          <div id="collectionList" class="list"></div>
+          <div id="collectionEmpty" class="hint" style="display:none; padding:10px 2px;">This collection is empty.</div>
+        </div>
+
+        <!-- Edit collection panel -->
+        <div id="collectionEditPanel" class="stack" style="display:none;">
+          <div>
+            <label for="collectionNameInput">Collection Name</label>
+            <input id="collectionNameInput" placeholder="e.g., Rocky" autocomplete="off" />
+          </div>
+
+          <div>
+            <label>Artwork (optional)</label>
+            <div class="row" style="gap:12px; align-items:center; flex-wrap:wrap;">
+              <button class="btn small ghost" id="collectionArtBtn" type="button">Choose Artwork…</button>
+              <button class="btn small danger" id="collectionArtRemoveBtn" type="button" style="display:none;">Remove</button>
+              <input id="collectionArtFile" class="fileOffscreen" type="file" accept="image/*" />
+              <div class="hint" style="flex:1; min-width:220px;">Tip: Use a franchise poster or logo.</div>
+            </div>
+            <div style="margin-top:10px;">
+              <img id="collectionArtPreview" class="posterPreview" alt="Collection artwork preview" />
+            </div>
+          </div>
+
+          <div class="row">
+            <button class="btn primary grow" id="collectionSaveBtn" type="button">Save</button>
+            <button class="btn danger" id="collectionDeleteBtn" type="button">Delete</button>
+          </div>
+          <div class="hint">Deleting a collection does not delete movies. It just unfiles them.</div>
+        </div>
+
+        <!-- Add existing picker -->
+        <div id="collectionPickPanel" class="stack" style="display:none;">
+          <div class="row">
+            <input id="collectionPickQ" placeholder="Search your vault…" class="grow" />
+          </div>
+          <div id="collectionPickList" class="stack"></div>
+          <div id="collectionPickEmpty" class="hint" style="display:none; padding:10px 2px;">No matching movies.</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
   <div class="toast" id="toast"></div>
 
 <script>
@@ -622,7 +775,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.32";
+const APP_VERSION = "v2.0.33-collections";
 
   function applyAppVersion(){
     try{
@@ -791,6 +944,7 @@ const Store = (() => {
       fullCast: (m && m.fullCast) ? String(m.fullCast).trim() : "",
       plot: (m && m.plot) ? String(m.plot).trim() : "",
       poster: (m && m.poster) ? String(m.poster) : "", // data URL (embedded)
+      collectionId: (m && m.collectionId !== undefined && m.collectionId !== null) ? String(m.collectionId) : "",
       createdAt: (m && m.createdAt) ? Number(m.createdAt) : now,
       updatedAt: (m && m.updatedAt) ? Number(m.updatedAt) : now,
     };
@@ -799,13 +953,23 @@ const Store = (() => {
   function load(){
     try{
       const raw = ok ? localStorage.getItem(Config.STORAGE_KEY) : mem;
-      if(!raw) return { movies: [] };
+      if(!raw) return { movies: [], collections: [] };
       const parsed = JSON.parse(raw);
-      if(!parsed || !Array.isArray(parsed.movies)) return { movies: [] };
+      if(!parsed || !Array.isArray(parsed.movies)) return { movies: [], collections: [] };
       parsed.movies = parsed.movies.map(normalize);
+      if(!Array.isArray(parsed.collections)) parsed.collections = [];
+      parsed.collections = parsed.collections.map(c => ({
+        id: String(c && c.id || ""),
+        name: String(c && c.name || "").trim(),
+        artwork: String(c && c.artwork || ""),
+        sortMode: String(c && c.sortMode || "custom"),
+        customOrder: Array.isArray(c && c.customOrder) ? c.customOrder.map(String) : [],
+        createdAt: Number(c && c.createdAt || Date.now()),
+        updatedAt: Number(c && c.updatedAt || Date.now()),
+      })).filter(c => c.id && c.name);
       return parsed;
     }catch(_){
-      return { movies: [] };
+      return { movies: [], collections: [] };
     }
   }
 
@@ -856,6 +1020,7 @@ const UI = (() => {
     title: document.getElementById("title"),
     release: document.getElementById("release"),
     director: document.getElementById("director"),
+    collectionSelect: document.getElementById("collectionSelect"),
     cast: document.getElementById("cast"),
     plot: document.getElementById("plot"),
     // posters
@@ -875,6 +1040,7 @@ const UI = (() => {
     countPill: document.getElementById("countPill"),
     // add/edit modal
     addMovieBtn: document.getElementById("addMovieBtn"),
+    collectionsBtn: document.getElementById("collectionsBtn"),
     formModal: document.getElementById("formModal"),
     formSheet: document.getElementById("formSheet"),
     formCloseBtn: document.getElementById("formCloseBtn"),
@@ -900,6 +1066,40 @@ const UI = (() => {
     pickList: document.getElementById("pickList"),
     azBar: document.getElementById("azBar"),
     toast: document.getElementById("toast"),
+    // collections
+    collectionsModal: document.getElementById("collectionsModal"),
+    collectionsSheet: document.getElementById("collectionsSheet"),
+    collectionsCloseBtn: document.getElementById("collectionsCloseBtn"),
+    collectionsBackBtn: document.getElementById("collectionsBackBtn"),
+    collectionsTopTitle: document.getElementById("collectionsTopTitle"),
+    collectionsTopSub: document.getElementById("collectionsTopSub"),
+    newCollectionBtn: document.getElementById("newCollectionBtn"),
+    collectionsGrid: document.getElementById("collectionsGrid"),
+    collectionsEmpty: document.getElementById("collectionsEmpty"),
+    collectionsListView: document.getElementById("collectionsListView"),
+    collectionDetailView: document.getElementById("collectionDetailView"),
+    collectionNameTitle: document.getElementById("collectionNameTitle"),
+    collectionCountHint: document.getElementById("collectionCountHint"),
+    collectionEditBtn: document.getElementById("collectionEditBtn"),
+    collectionAddExistingBtn: document.getElementById("collectionAddExistingBtn"),
+    collectionAddNewBtn: document.getElementById("collectionAddNewBtn"),
+    collectionQ: document.getElementById("collectionQ"),
+    collectionSort: document.getElementById("collectionSort"),
+    collectionList: document.getElementById("collectionList"),
+    collectionEmpty: document.getElementById("collectionEmpty"),
+    collectionEditPanel: document.getElementById("collectionEditPanel"),
+    collectionNameInput: document.getElementById("collectionNameInput"),
+    collectionArtBtn: document.getElementById("collectionArtBtn"),
+    collectionArtRemoveBtn: document.getElementById("collectionArtRemoveBtn"),
+    collectionArtFile: document.getElementById("collectionArtFile"),
+    collectionArtPreview: document.getElementById("collectionArtPreview"),
+    collectionSaveBtn: document.getElementById("collectionSaveBtn"),
+    collectionDeleteBtn: document.getElementById("collectionDeleteBtn"),
+    collectionPickPanel: document.getElementById("collectionPickPanel"),
+    collectionPickQ: document.getElementById("collectionPickQ"),
+    collectionPickList: document.getElementById("collectionPickList"),
+    collectionPickEmpty: document.getElementById("collectionPickEmpty"),
+
     // modal
     modal: document.getElementById("modal"),
     sheet: document.getElementById("sheet"),
@@ -958,6 +1158,10 @@ const UI = (() => {
     el.title.value = m.title || "";
     el.release.value = m.release || "";
     el.director.value = m.director || "";
+    if(el.collectionSelect){
+      // options are refreshed in App; set value if present
+      el.collectionSelect.value = (m.collectionId || "");
+    }
     if(el.cast) el.cast.value = m.cast || "";
     if(el.plot) el.plot.value = m.plot || "";
   }
@@ -965,6 +1169,7 @@ const UI = (() => {
     el.title.value = "";
     el.release.value = "";
     el.director.value = "";
+    if(el.collectionSelect) el.collectionSelect.value = "";
     if(el.cast) el.cast.value = "";
     if(el.plot) el.plot.value = "";
     if(el.posterPreview){
@@ -1093,6 +1298,337 @@ const UI = (() => {
 /* 4) App */
 const App = (() => {
   let state = Store.load();
+  // --- Collections (full system: folders + optional artwork; custom ordering later) ---
+  function escH(s){ return String(s ?? "").replace(/[&<>"\']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","\'":"&#39;" }[c])); }
+  function getCollection(id){ return state.collections.find(c => c.id === id) || null; }
+
+  function refreshCollectionSelectOptions(selectedId){
+    if(!UI.el.collectionSelect) return;
+    const sel = UI.el.collectionSelect;
+    const keep = (selectedId !== undefined) ? String(selectedId||"") : String(sel.value||"");
+    sel.innerHTML = '<option value="">None</option>';
+    const cols = (state.collections || []).slice().sort((a,b)=> (a.name||"").localeCompare(b.name||"", undefined, {sensitivity:"base"}));
+    for(const c of cols){
+      const opt = document.createElement("option");
+      opt.value = c.id;
+      opt.textContent = c.name;
+      sel.appendChild(opt);
+    }
+    sel.value = keep;
+  }
+
+  function removeFromCustomOrder(collectionId, movieId){
+    const col = getCollection(collectionId);
+    if(!col) return;
+    col.customOrder = Array.isArray(col.customOrder) ? col.customOrder.filter(id => id !== movieId) : [];
+    col.updatedAt = Date.now();
+  }
+
+  function addToCustomOrder(collectionId, movieId){
+    const col = getCollection(collectionId);
+    if(!col) return;
+    if(!Array.isArray(col.customOrder)) col.customOrder = [];
+    if(!col.customOrder.includes(movieId)) col.customOrder.push(movieId);
+    col.updatedAt = Date.now();
+  }
+
+  function setMovieCollection(movieId, newCollectionId, oldCollectionId){
+    const oldId = (oldCollectionId !== undefined) ? String(oldCollectionId||"") : (getMovie(movieId)?.collectionId || "");
+    const newId = String(newCollectionId||"");
+
+    if(oldId && oldId !== newId) removeFromCustomOrder(oldId, movieId);
+    if(newId) addToCustomOrder(newId, movieId);
+
+    const m = getMovie(movieId);
+    if(m) m.collectionId = newId;
+  }
+
+  // Collections modal view state
+  let collectionsView = "list"; // list | detail | edit | pick
+  let currentCollectionId = "";
+  let tempCollectionArtwork = "";
+
+  function openCollections(){
+    collectionsView = "list";
+    currentCollectionId = "";
+    showCollectionsView();
+    UI.el.collectionsModal.classList.add("open");
+  }
+
+  function closeCollections(){
+    UI.el.collectionsModal.classList.remove("open");
+  }
+
+  function showCollectionsView(){
+    const el = UI.el;
+    // default hide all
+    el.collectionsListView.style.display = "none";
+    el.collectionDetailView.style.display = "none";
+    el.collectionEditPanel.style.display = "none";
+    el.collectionPickPanel.style.display = "none";
+
+    el.collectionsBackBtn.style.display = (collectionsView === "list") ? "none" : "inline-flex";
+
+    if(collectionsView === "list"){
+      el.collectionsTopTitle.textContent = "Collections";
+      el.collectionsTopSub.textContent = "Folders for franchises and series.";
+      el.collectionsListView.style.display = "block";
+      renderCollectionsGrid();
+      return;
+    }
+
+    const col = getCollection(currentCollectionId);
+    if(collectionsView === "detail" && col){
+      el.collectionsTopTitle.textContent = col.name;
+      el.collectionsTopSub.textContent = "Movies in this collection.";
+      el.collectionDetailView.style.display = "block";
+      el.collectionNameTitle.textContent = col.name;
+      el.collectionQ.value = "";
+      el.collectionSort.value = "custom";
+      renderCollectionDetail();
+      return;
+    }
+
+    if(collectionsView === "edit"){
+      el.collectionsTopTitle.textContent = (currentCollectionId ? "Edit Collection" : "New Collection");
+      el.collectionsTopSub.textContent = "Name + optional artwork.";
+      el.collectionEditPanel.style.display = "block";
+      const existing = currentCollectionId ? getCollection(currentCollectionId) : null;
+      el.collectionNameInput.value = existing ? existing.name : "";
+      tempCollectionArtwork = existing ? (existing.artwork||"") : "";
+      syncCollectionArtUI();
+      return;
+    }
+
+    if(collectionsView === "pick" && col){
+      el.collectionsTopTitle.textContent = "Add Existing";
+      el.collectionsTopSub.textContent = "Pick a movie to move into “" + col.name + "”.";
+      el.collectionPickPanel.style.display = "block";
+      el.collectionPickQ.value = "";
+      renderCollectionPick();
+      return;
+    }
+
+    // fallback
+    collectionsView = "list";
+    currentCollectionId = "";
+    showCollectionsView();
+  }
+
+  function renderCollectionsGrid(){
+    const grid = UI.el.collectionsGrid;
+    grid.innerHTML = "";
+    const cols = (state.collections || []).slice().sort((a,b)=> (a.name||"").localeCompare(b.name||"", undefined, {sensitivity:"base"}));
+    UI.el.collectionsEmpty.style.display = cols.length ? "none" : "block";
+
+    for(const c of cols){
+      const card = document.createElement("div");
+      card.className = "collectionCard";
+      card.dataset.id = c.id;
+
+      let artNode;
+      if(c.artwork){
+        artNode = document.createElement("img");
+        artNode.className = "collectionArt";
+        artNode.alt = "Artwork";
+        artNode.src = c.artwork;
+      }else{
+        artNode = document.createElement("div");
+        artNode.className = "collectionArt ph";
+        artNode.innerHTML = "NO<br/>ART";
+      }
+
+      const meta = document.createElement("div");
+      const name = document.createElement("div");
+      name.className = "collectionName";
+      name.textContent = c.name;
+
+      const count = document.createElement("div");
+      count.className = "collectionCount";
+      const n = state.movies.filter(m => (m.collectionId||"") === c.id).length;
+      count.textContent = n + (n===1 ? " movie" : " movies");
+
+      meta.appendChild(name);
+      meta.appendChild(count);
+
+      card.appendChild(artNode);
+      card.appendChild(meta);
+
+      grid.appendChild(card);
+    }
+  }
+
+  function getMoviesInCollection(colId){
+    return state.movies.filter(m => (m.collectionId||"") === colId);
+  }
+
+  function titleSort(a,b,dir){
+    const A = titleKey(a.title||"");
+    const B = titleKey(b.title||"");
+    const d = (A.localeCompare(B, undefined, {sensitivity:"base"}) || String(a.id).localeCompare(String(b.id)));
+    return dir === "desc" ? -d : d;
+  }
+
+  function releaseYear(m){
+    const y = String(m.release||"").trim().slice(0,4);
+    return (/^[0-9]{4}$/.test(y)) ? Number(y) : 9999;
+  }
+
+  function renderCollectionDetail(){
+    const col = getCollection(currentCollectionId);
+    if(!col) return;
+
+    let movies = getMoviesInCollection(col.id);
+
+    // search
+    const q = (UI.el.collectionQ.value||"").trim().toLowerCase();
+    if(q){
+      movies = movies.filter(m => {
+        const t = (m.title||"").toLowerCase();
+        const y = (m.release||"").toLowerCase();
+        const d = (m.director||"").toLowerCase();
+        return t.includes(q) || y.includes(q) || d.includes(q);
+      });
+    }
+
+    // sort
+    const mode = UI.el.collectionSort.value || "custom";
+    if(mode === "custom"){
+      const order = Array.isArray(col.customOrder) ? col.customOrder : [];
+      if(order.length){
+        const rank = new Map(order.map((id,i)=>[id,i]));
+        movies.sort((a,b)=>{
+          const ra = rank.has(a.id) ? rank.get(a.id) : 1e9;
+          const rb = rank.has(b.id) ? rank.get(b.id) : 1e9;
+          return (ra-rb) || (releaseYear(a)-releaseYear(b)) || titleSort(a,b,"asc");
+        });
+      }else{
+        movies.sort((a,b)=> (releaseYear(a)-releaseYear(b)) || titleSort(a,b,"asc"));
+      }
+    }else if(mode === "release_asc"){
+      movies.sort((a,b)=> (releaseYear(a)-releaseYear(b)) || titleSort(a,b,"asc"));
+    }else if(mode === "release_desc"){
+      movies.sort((a,b)=> (releaseYear(b)-releaseYear(a)) || titleSort(a,b,"asc"));
+    }else if(mode === "title_desc"){
+      movies.sort((a,b)=> titleSort(a,b,"desc"));
+    }else{
+      movies.sort((a,b)=> titleSort(a,b,"asc"));
+    }
+
+    UI.el.collectionCountHint.textContent = movies.length + (movies.length===1 ? " movie" : " movies");
+    const list = UI.el.collectionList;
+    list.innerHTML = "";
+    UI.el.collectionEmpty.style.display = movies.length ? "none" : "block";
+
+    for(const m of movies){
+      const div = document.createElement("div");
+      div.className = "item";
+      div.dataset.id = m.id;
+
+      const thumb = m.poster
+        ? `<img class="thumb" alt="Poster" src="${escH(m.poster)}" />`
+        : `<div class="thumb ph">NO<br/>POSTER</div>`;
+
+      const year = (m.release || "").trim().slice(0,4);
+      const yearSafe = (/^[0-9]{4}$/.test(year) ? year : "—");
+
+      div.innerHTML = `
+        ${thumb}
+        <div>
+          <div class="title">${escH(m.title || "(Untitled)")}</div>
+          <div class="meta"><b>${escH(yearSafe)}</b></div>
+        </div>
+      `;
+      list.appendChild(div);
+    }
+  }
+
+  function renderCollectionPick(){
+    const col = getCollection(currentCollectionId);
+    if(!col) return;
+
+    const q = (UI.el.collectionPickQ.value||"").trim().toLowerCase();
+    let movies = state.movies.slice();
+
+    if(q){
+      movies = movies.filter(m => (m.title||"").toLowerCase().includes(q) || (m.release||"").toLowerCase().includes(q));
+    }
+
+    movies.sort((a,b)=> titleSort(a,b,"asc"));
+
+    const list = UI.el.collectionPickList;
+    list.innerHTML = "";
+    UI.el.collectionPickEmpty.style.display = movies.length ? "none" : "block";
+
+    for(const m of movies){
+      const row = document.createElement("div");
+      row.className = "row";
+      row.style.gap = "10px";
+      row.style.alignItems = "center";
+
+      const label = document.createElement("div");
+      label.className = "grow";
+      const inCol = (m.collectionId||"") === col.id;
+      const current = m.collectionId ? (getCollection(m.collectionId)?.name || "Other collection") : "Unfiled";
+      label.innerHTML = `<div style="font-weight:800;">${escH(m.title||"(Untitled)")}</div>
+                         <div class="hint" style="margin:2px 0 0 0;">${escH((m.release||"").trim().slice(0,4)||"—")} · ${inCol ? "Already here" : "Currently: " + current}</div>`;
+
+      const btn = document.createElement("button");
+      btn.className = "btn small " + (inCol ? "ghost" : "primary");
+      btn.type = "button";
+      btn.textContent = inCol ? "Added" : "Add";
+      btn.disabled = inCol;
+      btn.addEventListener("click", () => {
+        setMovieCollection(m.id, col.id, m.collectionId||"");
+        Store.save(state);
+        refreshCollectionSelectOptions(UI.el.collectionSelect.value);
+        UI.toast("Added to " + col.name + ".");
+        renderCollectionsGrid();
+        collectionsView = "detail";
+        showCollectionsView();
+      });
+
+      row.appendChild(label);
+      row.appendChild(btn);
+      list.appendChild(row);
+    }
+  }
+
+  function syncCollectionArtUI(){
+    const has = !!tempCollectionArtwork;
+    UI.el.collectionArtPreview.style.display = has ? "block" : "none";
+    UI.el.collectionArtPreview.src = tempCollectionArtwork || "";
+    UI.el.collectionArtRemoveBtn.style.display = has ? "inline-flex" : "none";
+  }
+
+  async function fileToDataUrlScaled(file, max=420){
+    const dataUrl = await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(String(fr.result||""));
+      fr.onerror = () => rej(new Error("read failed"));
+      fr.readAsDataURL(file);
+    });
+    // scale via canvas (keeps storage sane)
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = () => rej(new Error("img load failed"));
+      i.src = dataUrl;
+    });
+    const w = img.width || 0, h = img.height || 0;
+    if(!w || !h) return dataUrl;
+    const scale = Math.min(1, max / Math.max(w,h));
+    if(scale >= 1) return dataUrl;
+    const cw = Math.max(1, Math.round(w*scale));
+    const ch = Math.max(1, Math.round(h*scale));
+    const c = document.createElement("canvas");
+    c.width = cw; c.height = ch;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0, cw, ch);
+    return c.toDataURL("image/jpeg", 0.86);
+  }
+
+
 
   // Sticky A–Z jump bar support
   let lastRendered = [];
@@ -1221,6 +1757,7 @@ let editingId = null;
       if(!lastDeleted) return;
       const pos = Math.max(0, Math.min(state.movies.length, lastDeleted.index));
       state.movies.splice(pos, 0, lastDeleted.movie);
+      if(lastDeleted.movie && lastDeleted.movie.collectionId) addToCustomOrder(lastDeleted.movie.collectionId, lastDeleted.movie.id);
       state.appVersion = APP_VERSION;
       Store.save(state);
       clearUndo();
@@ -1234,6 +1771,7 @@ let editingId = null;
     const idx = state.movies.findIndex(x => x.id === id);
     if(idx < 0) return { deleted:null, index:-1 };
     const deleted = state.movies[idx];
+    if(deleted && deleted.collectionId) removeFromCustomOrder(deleted.collectionId, deleted.id);
     state.movies.splice(idx, 1);
     state.appVersion = APP_VERSION;
     Store.save(state);
@@ -1342,6 +1880,7 @@ let editingId = null;
     setPoster("");
     currentFullCast = "";
     UI.clearForm();
+    refreshCollectionSelectOptions("");
     UI.setEditMode(false);
     if(UI.el.saveBtn) UI.el.saveBtn.disabled = true;
   }
@@ -1356,12 +1895,15 @@ let editingId = null;
 
     const existing = editingId ? getMovie(editingId) : null;
     const base = existing || Store.normalize({});
+    const prevCollectionId = existing ? (existing.collectionId || "") : "";
+    const nextCollectionId = (UI.el.collectionSelect ? String(UI.el.collectionSelect.value||"") : "");
     const movie = Store.normalize({
       ...base,
       id: editingId || base.id,
       title,
       release: UI.el.release.value.trim(),
       director: UI.el.director.value.trim(),
+      collectionId: nextCollectionId,
       cast: (UI.el.cast ? UI.el.cast.value.trim() : ""),
       fullCast: (currentFullCast || (UI.el.cast ? UI.el.cast.value.trim() : "")),
       plot: (UI.el.plot ? UI.el.plot.value.trim() : ""),
@@ -1372,6 +1914,9 @@ let editingId = null;
     const idx = state.movies.findIndex(x => x.id === movie.id);
     if(idx >= 0){
       state.movies[idx] = movie;
+      // update collection membership + ordering
+      if(prevCollectionId !== nextCollectionId) setMovieCollection(movie.id, nextCollectionId, prevCollectionId);
+      
       // After updating, reset back to Add mode (less confusion, matches your workflow)
       resetForm();
       render();
@@ -1379,6 +1924,7 @@ let editingId = null;
       UI.toast("Updated.");
     }else{
       state.movies.unshift(movie);
+      if(nextCollectionId) setMovieCollection(movie.id, nextCollectionId, "");
       resetForm(); // auto-reset after adding
       render();
       UI.closeFormModal();
@@ -1411,6 +1957,7 @@ let editingId = null;
     if(!m) return;
     editingId = m.id;
     UI.setEditMode(true);
+    refreshCollectionSelectOptions(m.collectionId || "");
     UI.fillForm(m);
     setPoster(m.poster || "");
     currentFullCast = (m.fullCast || m.cast || "");
@@ -1618,6 +2165,14 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
         syncSaveEnabled();
       });
     }
+
+    // Collections button
+    if(UI.el.collectionsBtn){
+      UI.el.collectionsBtn.addEventListener("click", () => {
+        openCollections();
+      });
+    }
+
     if(UI.el.formCloseBtn){
       UI.el.formCloseBtn.addEventListener("click", () => UI.closeFormModal());
     }
@@ -1650,7 +2205,132 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     UI.el.saveBtn.addEventListener("click", saveMovie);
     if(UI.el.autoFillBtn) UI.el.autoFillBtn.addEventListener("click", autoFill);
 
-UI.el.deleteBtn.addEventListener("click", deleteMovie);
+    // Collections modal wiring
+    if(UI.el.collectionsCloseBtn) UI.el.collectionsCloseBtn.addEventListener("click", closeCollections);
+    if(UI.el.collectionsModal) UI.el.collectionsModal.addEventListener("click", (e)=>{
+      if(e.target === UI.el.collectionsModal) closeCollections();
+    });
+    if(UI.el.collectionsBackBtn) UI.el.collectionsBackBtn.addEventListener("click", () => {
+      if(collectionsView === "detail"){ collectionsView = "list"; currentCollectionId = ""; }
+      else if(collectionsView === "edit" || collectionsView === "pick"){ collectionsView = "detail"; }
+      else { collectionsView = "list"; currentCollectionId = ""; }
+      showCollectionsView();
+    });
+
+    if(UI.el.newCollectionBtn) UI.el.newCollectionBtn.addEventListener("click", () => {
+      currentCollectionId = "";
+      collectionsView = "edit";
+      showCollectionsView();
+    });
+
+    if(UI.el.collectionsGrid) UI.el.collectionsGrid.addEventListener("click", (e)=>{
+      const card = e.target.closest(".collectionCard");
+      if(!card) return;
+      currentCollectionId = card.dataset.id;
+      collectionsView = "detail";
+      showCollectionsView();
+    });
+
+    if(UI.el.collectionEditBtn) UI.el.collectionEditBtn.addEventListener("click", () => {
+      collectionsView = "edit";
+      showCollectionsView();
+    });
+
+    if(UI.el.collectionSaveBtn) UI.el.collectionSaveBtn.addEventListener("click", () => {
+      const name = (UI.el.collectionNameInput.value||"").trim();
+      if(!name){ UI.toast("Collection name is required."); UI.el.collectionNameInput.focus(); return; }
+
+      if(currentCollectionId){
+        const col = getCollection(currentCollectionId);
+        if(!col){ UI.toast("Collection not found."); collectionsView="list"; showCollectionsView(); return; }
+        col.name = name;
+        col.artwork = tempCollectionArtwork || "";
+        col.updatedAt = Date.now();
+      }else{
+        const id = uid();
+        state.collections.push({
+          id,
+          name,
+          artwork: tempCollectionArtwork || "",
+          sortMode: "custom",
+          customOrder: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+        currentCollectionId = id;
+      }
+
+      Store.save(state);
+      refreshCollectionSelectOptions(UI.el.collectionSelect.value);
+      UI.toast("Collection saved.");
+      collectionsView = "detail";
+      showCollectionsView();
+      render();
+    });
+
+    if(UI.el.collectionDeleteBtn) UI.el.collectionDeleteBtn.addEventListener("click", () => {
+      const col = getCollection(currentCollectionId);
+      if(!col) { collectionsView = "list"; currentCollectionId = ""; showCollectionsView(); return; }
+      const ok = confirm(`Delete collection “${col.name}”? Movies will NOT be deleted.`);
+      if(!ok) return;
+
+      // unfile movies
+      for(const m of state.movies){
+        if((m.collectionId||"") === col.id) m.collectionId = "";
+      }
+      // remove collection
+      state.collections = state.collections.filter(c => c.id !== col.id);
+
+      Store.save(state);
+      refreshCollectionSelectOptions(UI.el.collectionSelect.value);
+      UI.toast("Collection deleted.");
+      collectionsView = "list";
+      currentCollectionId = "";
+      showCollectionsView();
+      render();
+    });
+
+    if(UI.el.collectionArtBtn) UI.el.collectionArtBtn.addEventListener("click", () => UI.el.collectionArtFile && UI.el.collectionArtFile.click());
+    if(UI.el.collectionArtRemoveBtn) UI.el.collectionArtRemoveBtn.addEventListener("click", () => { tempCollectionArtwork = ""; syncCollectionArtUI(); });
+    if(UI.el.collectionArtFile) UI.el.collectionArtFile.addEventListener("change", async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if(!f) return;
+      try{
+        tempCollectionArtwork = await fileToDataUrlScaled(f, 420);
+        syncCollectionArtUI();
+      }catch(_){ UI.toast("Could not read image."); }
+      UI.el.collectionArtFile.value = "";
+    });
+
+    if(UI.el.collectionAddExistingBtn) UI.el.collectionAddExistingBtn.addEventListener("click", () => {
+      collectionsView = "pick";
+      showCollectionsView();
+    });
+
+    if(UI.el.collectionAddNewBtn) UI.el.collectionAddNewBtn.addEventListener("click", () => {
+      const col = getCollection(currentCollectionId);
+      if(!col) return;
+      closeCollections();
+      resetForm();
+      refreshCollectionSelectOptions(col.id);
+      if(UI.el.collectionSelect) UI.el.collectionSelect.value = col.id;
+      UI.openFormModal();
+      UI.el.title && UI.el.title.focus();
+      syncSaveEnabled();
+    });
+
+    if(UI.el.collectionQ) UI.el.collectionQ.addEventListener("input", renderCollectionDetail);
+    if(UI.el.collectionSort) UI.el.collectionSort.addEventListener("change", renderCollectionDetail);
+    if(UI.el.collectionPickQ) UI.el.collectionPickQ.addEventListener("input", renderCollectionPick);
+
+    if(UI.el.collectionList) UI.el.collectionList.addEventListener("click", (e) => {
+      const card = e.target.closest(".item");
+      if(!card) return;
+      closeCollections();
+      openModal(card.dataset.id);
+    });
+
+    if(UI.el.deleteBtn) UI.el.deleteBtn.addEventListener("click", deleteMovie);
 
     // Tools dropdown (Backup / Restore)
     if(UI.el.toolsBtn && UI.el.toolsMenu){
@@ -1785,6 +2465,7 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
     }
     resetForm();
     if(UI.el.sort) UI.el.sort.value = 'title_asc';
+    refreshCollectionSelectOptions("");
     render();
     syncSaveEnabled();
   }
