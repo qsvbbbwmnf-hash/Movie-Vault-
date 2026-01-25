@@ -800,7 +800,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.38-collection-dragdrop";
+const APP_VERSION = "v2.0.39-collection-dragdrop-fix";
 
   function applyAppVersion(){
     try{
@@ -1522,8 +1522,66 @@ const App = (() => {
 
 
 function getCollectionMoviesFilteredAndSorted(col){
-  const result = getCollectionMoviesFilteredAndSorted(col);
-    let movies = result.movies;
+    const q = (UI.el.collectionQ.value||"").trim().toLowerCase();
+    let movies = getMoviesInCollection(col.id).slice();
+
+    if(q){
+      movies = movies.filter(m => {
+        const t = String(m.title||"").toLowerCase();
+        const r = String(m.release||"").toLowerCase();
+        return t.includes(q) || r.includes(q);
+      });
+    }
+
+    // Keep customOrder sane: include all movies in the collection, remove ones no longer in it.
+    if(!Array.isArray(col.customOrder)) col.customOrder = [];
+    const fullIds = getMoviesInCollection(col.id).map(m => String(m.id));
+    let changed = false;
+
+    // append missing
+    for(const id of fullIds){
+      if(!col.customOrder.includes(id)){
+        col.customOrder.push(id);
+        changed = true;
+      }
+    }
+    // remove non-members
+    const pruned = col.customOrder.filter(id => fullIds.includes(String(id)));
+    if(pruned.length !== col.customOrder.length){
+      col.customOrder = pruned;
+      changed = true;
+    }
+    if(changed) col.updatedAt = Date.now();
+
+    const sortMode = (UI.el.collectionSort.value||"custom");
+    if(sortMode === "custom"){
+      const orderMap = new Map(col.customOrder.map((id, i) => [String(id), i]));
+      movies.sort((a,b)=>{
+        const ia = orderMap.has(String(a.id)) ? orderMap.get(String(a.id)) : 1e9;
+        const ib = orderMap.has(String(b.id)) ? orderMap.get(String(b.id)) : 1e9;
+        if(ia !== ib) return ia - ib;
+        return titleSort(a,b,"asc");
+      });
+    }else if(sortMode === "release"){
+      movies.sort((a,b)=> (releaseYear(a) - releaseYear(b)) || titleSort(a,b,"asc"));
+    }else{ // title
+      movies.sort((a,b)=> titleSort(a,b,"asc"));
+    }
+
+    return { movies };
+  }
+
+  function renderCollectionDetail(){
+    const col = getCollection(currentCollectionId);
+    if(!col){
+      collectionsView = "list";
+      currentCollectionId = "";
+      showCollectionsView();
+      return;
+    }
+
+    const result = getCollectionMoviesFilteredAndSorted(col);
+    const movies = result.movies;
 
     UI.el.collectionCountHint.textContent = movies.length + (movies.length===1 ? " movie" : " movies");
     const list = UI.el.collectionList;
@@ -1535,7 +1593,7 @@ function getCollectionMoviesFilteredAndSorted(col){
       const div = document.createElement("div");
       div.className = "item";
       div.dataset.id = m.id;
-      if(collectionReorderMode) div.draggable = true;
+      div.draggable = !!collectionReorderMode;
 
       const handle = collectionReorderMode ? `<div class="dragHandle" aria-hidden="true">≡</div>` : ``;
 
@@ -1556,6 +1614,24 @@ function getCollectionMoviesFilteredAndSorted(col){
       `;
       list.appendChild(div);
     }
+  }
+
+  function toggleCollectionReorder(){
+    const col = getCollection(currentCollectionId);
+    if(!col) return;
+
+    collectionReorderMode = !collectionReorderMode;
+    dragMovieId = "";
+
+    if(UI.el.collectionOrderBtn){
+      UI.el.collectionOrderBtn.textContent = collectionReorderMode ? "Done" : "Reorder";
+    }
+    UI.el.collectionQ.disabled = collectionReorderMode;
+    UI.el.collectionSort.disabled = collectionReorderMode;
+
+    // Re-render to apply draggable + handle UI
+    renderCollectionDetail();
+    UI.toast(collectionReorderMode ? "Drag movies to reorder." : "Order saved.");
   }
 
   function renderCollectionPick(){
@@ -2423,6 +2499,7 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     if(UI.el.collectionPickQ) UI.el.collectionPickQ.addEventListener("input", renderCollectionPick);
 
     if(UI.el.collectionList) UI.el.collectionList.addEventListener("click", (e) => {
+      if(collectionReorderMode) return;
       const card = e.target.closest(".item");
       if(!card) return;
       closeCollections();
@@ -2487,6 +2564,7 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     }
 
     UI.el.list.addEventListener("click", (e) => {
+      if(collectionReorderMode) return;
       const card = e.target.closest(".item");
       if(!card) return;
       openModal(card.dataset.id);
