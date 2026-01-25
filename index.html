@@ -423,10 +423,9 @@
     .collectionsGrid{
       display:grid;
       gap:10px;
-      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-    }
-    @media (min-width: 960px){
-      .collectionsGrid{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      /* Center collections when there are only a few (looks nicer on big screens) */
+      grid-template-columns: repeat(auto-fit, minmax(220px, 260px));
+      justify-content: center;
     }
     .collectionCard{
       border:1px solid rgba(255,255,255,.12);
@@ -778,7 +777,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.35-collections-uidfix";
+const APP_VERSION = "v2.0.36-collections-gridcenter";
 
   function applyAppVersion(){
     try{
