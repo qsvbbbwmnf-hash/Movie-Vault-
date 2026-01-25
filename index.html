@@ -445,11 +445,11 @@
       transform: translateY(-1px);
     }
     .collectionArt{
-      width:44px; height:44px;
-      border-radius: 12px;
+      width:48px; height:64px;
+      border-radius: 10px;
       border:1px solid rgba(255,255,255,.12);
-      background: rgba(255,255,255,.06);
-      object-fit: cover;
+      background: rgba(0,0,0,.20);
+      object-fit: contain;
       flex: 0 0 auto;
     }
     .collectionArt.ph{
@@ -777,7 +777,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.36-collections-gridcenter";
+const APP_VERSION = "v2.0.37-collection-art-full";
 
   function applyAppVersion(){
     try{
