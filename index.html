@@ -338,6 +338,9 @@
       -webkit-overflow-scrolling: touch;
       flex: 1;
     }
+
+    /* iOS keyboard safety: give bottom breathing room inside sheets */
+    #collectionsSheet .body{ padding-bottom: calc(14px + env(safe-area-inset-bottom) + 120px); }
     .kv{ display:grid; gap:8px; }
     .kv .row{
       display:flex; justify-content:space-between; gap:10px;
@@ -775,7 +778,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.33-collections";
+const APP_VERSION = "v2.0.34-collections-fix";
 
   function applyAppVersion(){
     try{
@@ -1397,6 +1400,11 @@ const App = (() => {
       el.collectionNameInput.value = existing ? existing.name : "";
       tempCollectionArtwork = existing ? (existing.artwork||"") : "";
       syncCollectionArtUI();
+      // iOS: ensure name + buttons are reachable even with keyboard
+      window.setTimeout(() => {
+        try{ el.collectionNameInput.focus(); }catch(_){ }
+        try{ el.collectionNameInput.scrollIntoView({ block: "center", behavior: "smooth" }); }catch(_){ }
+      }, 50);
       return;
     }
 
@@ -2237,6 +2245,7 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     });
 
     if(UI.el.collectionSaveBtn) UI.el.collectionSaveBtn.addEventListener("click", () => {
+      try{
       const name = (UI.el.collectionNameInput.value||"").trim();
       if(!name){ UI.toast("Collection name is required."); UI.el.collectionNameInput.focus(); return; }
 
@@ -2266,6 +2275,9 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       collectionsView = "detail";
       showCollectionsView();
       render();
+      }catch(err){
+        UI.toast("Could not save collection: " + String(err && err.message ? err.message : err));
+      }
     });
 
     if(UI.el.collectionDeleteBtn) UI.el.collectionDeleteBtn.addEventListener("click", () => {
