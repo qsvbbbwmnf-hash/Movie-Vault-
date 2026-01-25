@@ -800,7 +800,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.40-handle-fix";
+const APP_VERSION = "v2.0.41-addexisting-fix";
 
   function applyAppVersion(){
     try{
@@ -1230,7 +1230,6 @@ const UI = (() => {
   }
 
   function renderList(movies){
-    const handle = "";
     el.list.innerHTML = "";
     el.empty.style.display = movies.length ? "none" : "block";
 
@@ -1671,13 +1670,20 @@ function getCollectionMoviesFilteredAndSorted(col){
       btn.textContent = inCol ? "Added" : "Add";
       btn.disabled = inCol;
       btn.addEventListener("click", () => {
-        setMovieCollection(m.id, col.id, m.collectionId||"");
-        Store.save(state);
-        refreshCollectionSelectOptions(UI.el.collectionSelect.value);
-        UI.toast("Added to " + col.name + ".");
-        renderCollectionsGrid();
-        collectionsView = "detail";
-        showCollectionsView();
+        try{
+          setMovieCollection(m.id, col.id, m.collectionId||"");
+          Store.save(state);
+          // Keep main UI + dropdowns in sync
+          refreshCollectionSelectOptions(UI.el.collectionSelect ? UI.el.collectionSelect.value : "");
+          render();
+          UI.toast("Added to " + col.name + ".");
+          // Return to detail view
+          renderCollectionsGrid();
+          collectionsView = "detail";
+          showCollectionsView();
+        }catch(err){
+          UI.toast("Could not add movie: " + (err && err.message ? err.message : String(err)));
+        }
       });
 
       row.appendChild(label);
@@ -2411,6 +2417,10 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     });
 
     if(UI.el.collectionAddExistingBtn) UI.el.collectionAddExistingBtn.addEventListener("click", () => {
+      if(collectionReorderMode){
+        UI.toast("Exit Reorder mode first.");
+        return;
+      }
       collectionsView = "pick";
       showCollectionsView();
     });
