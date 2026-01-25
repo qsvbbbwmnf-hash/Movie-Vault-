@@ -800,7 +800,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.39-collection-dragdrop-fix";
+const APP_VERSION = "v2.0.40-handle-fix";
 
   function applyAppVersion(){
     try{
@@ -1230,6 +1230,7 @@ const UI = (() => {
   }
 
   function renderList(movies){
+    const handle = "";
     el.list.innerHTML = "";
     el.empty.style.display = movies.length ? "none" : "block";
 
