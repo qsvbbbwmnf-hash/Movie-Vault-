@@ -463,6 +463,28 @@
     .collectionName{ font-weight:900; font-size:13px; }
     .collectionCount{ color:var(--muted); font-size:12px; margin-top:2px; }
 
+    /* Collection reordering (drag/drop) */
+    #collectionList.reorderMode .item{
+      grid-template-columns: 26px 48px 1fr;
+      cursor: grab;
+    }
+    .dragHandle{
+      width:26px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      opacity:.72;
+      font-size:18px;
+      user-select:none;
+      -webkit-user-select:none;
+      cursor: grab;
+    }
+    #collectionList.reorderMode .item.dragging{ opacity:.35; }
+    #collectionList.reorderMode .item.dragOver{
+      outline: 2px dashed rgba(255,255,255,.35);
+      outline-offset: 3px;
+    }
+
 </style>
 </head>
 <body>
@@ -693,6 +715,7 @@
               <div style="font-weight:900; font-size:14px;" id="collectionNameTitle">—</div>
               <div class="hint" id="collectionCountHint">—</div>
             </div>
+            <button class="btn small ghost" id="collectionOrderBtn" type="button">Reorder</button>
             <button class="btn small ghost" id="collectionEditBtn" type="button">Edit</button>
           </div>
 
@@ -777,7 +800,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.37-collection-art-full";
+const APP_VERSION = "v2.0.38-collection-dragdrop";
 
   function applyAppVersion(){
     try{
@@ -1088,6 +1111,7 @@ const UI = (() => {
     collectionDetailView: document.getElementById("collectionDetailView"),
     collectionNameTitle: document.getElementById("collectionNameTitle"),
     collectionCountHint: document.getElementById("collectionCountHint"),
+    collectionOrderBtn: document.getElementById("collectionOrderBtn"),
     collectionEditBtn: document.getElementById("collectionEditBtn"),
     collectionAddExistingBtn: document.getElementById("collectionAddExistingBtn"),
     collectionAddNewBtn: document.getElementById("collectionAddNewBtn"),
@@ -1235,6 +1259,7 @@ const UI = (() => {
       const yearSafe = (/^[0-9]{4}$/.test(year) ? year : "—");
 
       div.innerHTML = `
+        ${handle}
         ${thumb}
         <div>
           <div class="title">${esc(m.title || "(Untitled)")}</div>
@@ -1355,6 +1380,8 @@ const App = (() => {
   let collectionsView = "list"; // list | detail | edit | pick
   let currentCollectionId = "";
   let tempCollectionArtwork = "";
+  let collectionReorderMode = false;
+  let dragMovieId = "";
 
   function openCollections(){
     collectionsView = "list";
@@ -1391,6 +1418,12 @@ const App = (() => {
       el.collectionsTopSub.textContent = "Movies in this collection.";
       el.collectionDetailView.style.display = "block";
       el.collectionNameTitle.textContent = col.name;
+      // entering detail always starts in normal (non-reorder) mode
+      collectionReorderMode = false;
+      dragMovieId = "";
+      if(el.collectionOrderBtn) el.collectionOrderBtn.textContent = "Reorder";
+      el.collectionQ.disabled = false;
+      el.collectionSort.disabled = false;
       el.collectionQ.value = "";
       el.collectionSort.value = "custom";
       renderCollectionDetail();
@@ -1487,49 +1520,14 @@ const App = (() => {
     return (/^[0-9]{4}$/.test(y)) ? Number(y) : 9999;
   }
 
-  function renderCollectionDetail(){
-    const col = getCollection(currentCollectionId);
-    if(!col) return;
 
-    let movies = getMoviesInCollection(col.id);
-
-    // search
-    const q = (UI.el.collectionQ.value||"").trim().toLowerCase();
-    if(q){
-      movies = movies.filter(m => {
-        const t = (m.title||"").toLowerCase();
-        const y = (m.release||"").toLowerCase();
-        const d = (m.director||"").toLowerCase();
-        return t.includes(q) || y.includes(q) || d.includes(q);
-      });
-    }
-
-    // sort
-    const mode = UI.el.collectionSort.value || "custom";
-    if(mode === "custom"){
-      const order = Array.isArray(col.customOrder) ? col.customOrder : [];
-      if(order.length){
-        const rank = new Map(order.map((id,i)=>[id,i]));
-        movies.sort((a,b)=>{
-          const ra = rank.has(a.id) ? rank.get(a.id) : 1e9;
-          const rb = rank.has(b.id) ? rank.get(b.id) : 1e9;
-          return (ra-rb) || (releaseYear(a)-releaseYear(b)) || titleSort(a,b,"asc");
-        });
-      }else{
-        movies.sort((a,b)=> (releaseYear(a)-releaseYear(b)) || titleSort(a,b,"asc"));
-      }
-    }else if(mode === "release_asc"){
-      movies.sort((a,b)=> (releaseYear(a)-releaseYear(b)) || titleSort(a,b,"asc"));
-    }else if(mode === "release_desc"){
-      movies.sort((a,b)=> (releaseYear(b)-releaseYear(a)) || titleSort(a,b,"asc"));
-    }else if(mode === "title_desc"){
-      movies.sort((a,b)=> titleSort(a,b,"desc"));
-    }else{
-      movies.sort((a,b)=> titleSort(a,b,"asc"));
-    }
+function getCollectionMoviesFilteredAndSorted(col){
+  const result = getCollectionMoviesFilteredAndSorted(col);
+    let movies = result.movies;
 
     UI.el.collectionCountHint.textContent = movies.length + (movies.length===1 ? " movie" : " movies");
     const list = UI.el.collectionList;
+    list.classList.toggle("reorderMode", collectionReorderMode);
     list.innerHTML = "";
     UI.el.collectionEmpty.style.display = movies.length ? "none" : "block";
 
@@ -1537,6 +1535,9 @@ const App = (() => {
       const div = document.createElement("div");
       div.className = "item";
       div.dataset.id = m.id;
+      if(collectionReorderMode) div.draggable = true;
+
+      const handle = collectionReorderMode ? `<div class="dragHandle" aria-hidden="true">≡</div>` : ``;
 
       const thumb = m.poster
         ? `<img class="thumb" alt="Poster" src="${escH(m.poster)}" />`
@@ -1546,6 +1547,7 @@ const App = (() => {
       const yearSafe = (/^[0-9]{4}$/.test(year) ? year : "—");
 
       div.innerHTML = `
+        ${handle}
         ${thumb}
         <div>
           <div class="title">${escH(m.title || "(Untitled)")}</div>
@@ -2224,6 +2226,14 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       if(e.target === UI.el.collectionsModal) closeCollections();
     });
     if(UI.el.collectionsBackBtn) UI.el.collectionsBackBtn.addEventListener("click", () => {
+      // Leaving detail view should always exit reorder mode
+      if(collectionReorderMode){
+        collectionReorderMode = false;
+        dragMovieId = "";
+        if(UI.el.collectionOrderBtn) UI.el.collectionOrderBtn.textContent = "Reorder";
+        if(UI.el.collectionSort) UI.el.collectionSort.disabled = false;
+        if(UI.el.collectionQ) UI.el.collectionQ.disabled = false;
+      }
       if(collectionsView === "detail"){ collectionsView = "list"; currentCollectionId = ""; }
       else if(collectionsView === "edit" || collectionsView === "pick"){ collectionsView = "detail"; }
       else { collectionsView = "list"; currentCollectionId = ""; }
@@ -2244,7 +2254,11 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       showCollectionsView();
     });
 
-    if(UI.el.collectionEditBtn) UI.el.collectionEditBtn.addEventListener("click", () => {
+    if(UI.el.collectionEditBtn) if(UI.el.collectionOrderBtn) UI.el.collectionOrderBtn.addEventListener("click", () => {
+      toggleCollectionReorder();
+    });
+
+    UI.el.collectionEditBtn.addEventListener("click", () => {
       collectionsView = "edit";
       showCollectionsView();
     });
@@ -2338,6 +2352,74 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
 
     if(UI.el.collectionQ) UI.el.collectionQ.addEventListener("input", renderCollectionDetail);
     if(UI.el.collectionSort) UI.el.collectionSort.addEventListener("change", renderCollectionDetail);
+    // Drag/drop ordering inside a collection (custom order)
+    UI.el.collectionList.addEventListener("dragstart", (e) => {
+      if(!collectionReorderMode) return;
+      const item = e.target && e.target.closest ? e.target.closest(".item") : null;
+      if(!item) return;
+      dragMovieId = item.dataset.id || "";
+      item.classList.add("dragging");
+      try{
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", dragMovieId);
+      }catch(err){}
+    });
+
+    UI.el.collectionList.addEventListener("dragover", (e) => {
+      if(!collectionReorderMode) return;
+      e.preventDefault();
+      const item = e.target && e.target.closest ? e.target.closest(".item") : null;
+      if(!item) return;
+      item.classList.add("dragOver");
+      try{ e.dataTransfer.dropEffect = "move"; }catch(err){}
+    });
+
+    UI.el.collectionList.addEventListener("dragleave", (e) => {
+      if(!collectionReorderMode) return;
+      const item = e.target && e.target.closest ? e.target.closest(".item") : null;
+      if(item) item.classList.remove("dragOver");
+    });
+
+    UI.el.collectionList.addEventListener("drop", (e) => {
+      if(!collectionReorderMode) return;
+      e.preventDefault();
+      const col = getCollection(currentCollectionId);
+      if(!col) return;
+
+      const target = e.target && e.target.closest ? e.target.closest(".item") : null;
+      const dragged = dragMovieId || "";
+      if(!dragged) return;
+
+      const ids = Array.from(UI.el.collectionList.querySelectorAll(".item")).map(n => String(n.dataset.id||"")).filter(Boolean);
+      const from = ids.indexOf(dragged);
+      if(from === -1) return;
+
+      // Determine insertion point
+      let to = ids.length - 1;
+      if(target){
+        const tid = String(target.dataset.id||"");
+        const tIndex = ids.indexOf(tid);
+        if(tIndex !== -1) to = tIndex;
+      }
+
+      // Move dragged id to new position (insert before 'to')
+      ids.splice(from, 1);
+      // If dragging downward past target, adjust index after removal
+      if(from < to) to = Math.max(0, to - 1);
+      ids.splice(to, 0, dragged);
+
+      col.customOrder = ids;
+      Store.save(state);
+      renderCollectionDetail();
+    });
+
+    UI.el.collectionList.addEventListener("dragend", (e) => {
+      if(!collectionReorderMode) return;
+      const items = UI.el.collectionList.querySelectorAll(".item");
+      items.forEach(it => it.classList.remove("dragging","dragOver"));
+      dragMovieId = "";
+    });
+
     if(UI.el.collectionPickQ) UI.el.collectionPickQ.addEventListener("input", renderCollectionPick);
 
     if(UI.el.collectionList) UI.el.collectionList.addEventListener("click", (e) => {
