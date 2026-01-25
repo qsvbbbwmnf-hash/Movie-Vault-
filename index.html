@@ -608,7 +608,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.30";
+const APP_VERSION = "v2.0.31";
 
   function applyAppVersion(){
     try{
@@ -1148,7 +1148,7 @@ const App = (() => {
     scrollSpyRaf = requestAnimationFrame(updateActiveFromScroll);
   }
 
-  function jumpToLetterfunction jumpToLetter(letter){
+  function jumpToLetter(letter){
     const L = String(letter || '').toUpperCase();
     if(!L) return;
     const m = lastRendered.find(x => letterKeyFromTitle(x.title) === L);
