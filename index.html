@@ -800,7 +800,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.43-addexisting-picker-fix";
+const APP_VERSION = "v2.0.44-picker-debug";
 
   function applyAppVersion(){
     try{
@@ -1644,7 +1644,7 @@ function getCollectionMoviesFilteredAndSorted(col){
     if(!col) return;
 
     const q = (UI.el.collectionPickQ.value||"").trim().toLowerCase();
-    let movies = state.movies.slice();
+    let movies = (Array.isArray(state.movies) ? state.movies : []).slice();
 
     if(q){
       movies = movies.filter(m => (m.title||"").toLowerCase().includes(q) || (m.release||"").toLowerCase().includes(q));
@@ -1710,7 +1710,7 @@ function getCollectionMoviesFilteredAndSorted(col){
     try{ UI.toast("Picker error: " + (err && err.message ? err.message : String(err))); }catch(_){ }
     try{
       if(UI.el.collectionPickList) UI.el.collectionPickList.innerHTML = "";
-      if(UI.el.collectionPickEmpty) { UI.el.collectionPickEmpty.style.display = "block"; UI.el.collectionPickEmpty.textContent = "Could not load your movie list."; }
+      if(UI.el.collectionPickEmpty) { UI.el.collectionPickEmpty.style.display = "block"; UI.el.collectionPickEmpty.textContent = "Could not load your movie list. " + (err && err.message ? ("Error: " + err.message) : ""); }
     }catch(_){ }
   }
 }
