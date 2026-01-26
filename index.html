@@ -800,7 +800,14 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.44-picker-debug";
+
+function titleKey(movie) {
+  // Normalized title for sorting/searching (ignores leading articles).
+  const t = (movie && movie.title) ? String(movie.title) : "";
+  return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
+}
+
+const APP_VERSION = "v2.0.45-addexisting-titlekey-fix";
 
   function applyAppVersion(){
     try{
