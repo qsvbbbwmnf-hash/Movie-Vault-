@@ -800,7 +800,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.41-addexisting-fix";
+const APP_VERSION = "v2.0.42-addexisting-solid";
 
   function applyAppVersion(){
     try{
@@ -1230,6 +1230,7 @@ const UI = (() => {
   }
 
   function renderList(movies){
+    const handle = "";
     el.list.innerHTML = "";
     el.empty.style.display = movies.length ? "none" : "block";
 
@@ -1671,18 +1672,28 @@ function getCollectionMoviesFilteredAndSorted(col){
       btn.disabled = inCol;
       btn.addEventListener("click", () => {
         try{
-          setMovieCollection(m.id, col.id, m.collectionId||"");
+          // Ensure we are not in reorder mode when moving movies via picker
+          if(typeof collectionReorderMode !== "undefined" && collectionReorderMode){
+            collectionReorderMode = false;
+            dragMovieId = "";
+            if(UI.el.collectionOrderBtn) UI.el.collectionOrderBtn.textContent = "Reorder";
+          }
+
+          const prevColId = m.collectionId || "";
+          setMovieCollection(m.id, col.id, prevColId);
           Store.save(state);
-          // Keep main UI + dropdowns in sync
-          refreshCollectionSelectOptions(UI.el.collectionSelect ? UI.el.collectionSelect.value : "");
-          render();
+
+          // Keep collection dropdowns in sync (Edit Movie modal) if present
+          try{ refreshCollectionSelectOptions(UI.el.collectionSelect ? UI.el.collectionSelect.value : ""); }catch(_){}
+
           UI.toast("Added to " + col.name + ".");
-          // Return to detail view
-          renderCollectionsGrid();
+
+          // Jump back to detail view and re-render from the updated state
           collectionsView = "detail";
           showCollectionsView();
         }catch(err){
-          UI.toast("Could not add movie: " + (err && err.message ? err.message : String(err)));
+          console.error(err);
+          UI.toast("Could not add existing movie: " + (err && err.message ? err.message : String(err)));
         }
       });
 
@@ -2417,10 +2428,6 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     });
 
     if(UI.el.collectionAddExistingBtn) UI.el.collectionAddExistingBtn.addEventListener("click", () => {
-      if(collectionReorderMode){
-        UI.toast("Exit Reorder mode first.");
-        return;
-      }
       collectionsView = "pick";
       showCollectionsView();
     });
