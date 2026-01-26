@@ -800,7 +800,7 @@ function getFullCastFromCredits(credits, max = 15) {
     .join(", ");
 }
 
-const APP_VERSION = "v2.0.42-addexisting-solid";
+const APP_VERSION = "v2.0.43-addexisting-picker-fix";
 
   function applyAppVersion(){
     try{
@@ -1452,7 +1452,10 @@ const App = (() => {
       el.collectionsTopSub.textContent = "Pick a movie to move into “" + col.name + "”.";
       el.collectionPickPanel.style.display = "block";
       el.collectionPickQ.value = "";
+      if(el.collectionPickEmpty) el.collectionPickEmpty.textContent = "No matching movies.";
       renderCollectionPick();
+      // iOS Safari sometimes needs a tick after display change
+      window.setTimeout(renderCollectionPick, 0);
       return;
     }
 
@@ -1636,6 +1639,7 @@ function getCollectionMoviesFilteredAndSorted(col){
   }
 
   function renderCollectionPick(){
+  try{
     const col = getCollection(currentCollectionId);
     if(!col) return;
 
@@ -1701,7 +1705,15 @@ function getCollectionMoviesFilteredAndSorted(col){
       row.appendChild(btn);
       list.appendChild(row);
     }
+  }catch(err){
+    console.error(err);
+    try{ UI.toast("Picker error: " + (err && err.message ? err.message : String(err))); }catch(_){ }
+    try{
+      if(UI.el.collectionPickList) UI.el.collectionPickList.innerHTML = "";
+      if(UI.el.collectionPickEmpty) { UI.el.collectionPickEmpty.style.display = "block"; UI.el.collectionPickEmpty.textContent = "Could not load your movie list."; }
+    }catch(_){ }
   }
+}
 
   function syncCollectionArtUI(){
     const has = !!tempCollectionArtwork;
