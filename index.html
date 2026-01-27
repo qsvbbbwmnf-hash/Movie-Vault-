@@ -716,12 +716,11 @@
         <div id="collectionDetailView" class="stack" style="display:none;">
           <div class="row" style="gap:10px; align-items:center; flex-wrap:wrap;">
             <div class="grow" style="min-width:220px;">
-              <div style="font-weight:900; font-size:14px;" id="collectionNameTitle">—</div>
+              <div style="font-weight:900; font-size:14px; cursor:pointer; text-decoration:underline; text-underline-offset:3px;" id="collectionNameTitle" title="Edit collection info">—</div>
               <div class="hint" id="collectionCountHint">—</div>
             </div>
             <button class="btn small ghost" id="collectionOrderBtn" type="button">Edit</button>
-            <button class="btn small ghost" id="collectionEditBtn" type="button">Edit Info</button>
-          </div>
+                      </div>
 
           <div class="row" style="gap:10px;">
             <button class="btn small primary grow" id="collectionAddExistingBtn" type="button">Add Existing</button>
@@ -811,7 +810,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.0.49-editmode-reorder-remove";
+const APP_VERSION = "v2.0.50-editmode-labels-info";
 
   function applyAppVersion(){
     try{
@@ -1123,7 +1122,6 @@ const UI = (() => {
     collectionNameTitle: document.getElementById("collectionNameTitle"),
     collectionCountHint: document.getElementById("collectionCountHint"),
     collectionOrderBtn: document.getElementById("collectionOrderBtn"),
-    collectionEditBtn: document.getElementById("collectionEditBtn"),
     collectionAddExistingBtn: document.getElementById("collectionAddExistingBtn"),
     collectionAddNewBtn: document.getElementById("collectionAddNewBtn"),
     collectionQ: document.getElementById("collectionQ"),
@@ -1433,7 +1431,7 @@ const App = (() => {
       // entering detail always starts in normal (non-reorder) mode
       collectionReorderMode = false;
       dragMovieId = "";
-      if(el.collectionOrderBtn) el.collectionOrderBtn.textContent = "Reorder";
+      if(el.collectionOrderBtn) el.collectionOrderBtn.textContent = "Edit";
       el.collectionQ.disabled = false;
       el.collectionSort.disabled = false;
       el.collectionQ.value = "";
@@ -1694,7 +1692,7 @@ function getCollectionMoviesFilteredAndSorted(col){
           if(typeof collectionReorderMode !== "undefined" && collectionReorderMode){
             collectionReorderMode = false;
             dragMovieId = "";
-            if(UI.el.collectionOrderBtn) UI.el.collectionOrderBtn.textContent = "Reorder";
+            if(UI.el.collectionOrderBtn) UI.el.collectionOrderBtn.textContent = "Edit";
           }
 
           const prevColId = m.collectionId || "";
@@ -2350,7 +2348,7 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       if(collectionReorderMode){
         collectionReorderMode = false;
         dragMovieId = "";
-        if(UI.el.collectionOrderBtn) UI.el.collectionOrderBtn.textContent = "Reorder";
+        if(UI.el.collectionOrderBtn) UI.el.collectionOrderBtn.textContent = "Edit";
         if(UI.el.collectionSort) UI.el.collectionSort.disabled = false;
         if(UI.el.collectionQ) UI.el.collectionQ.disabled = false;
       }
@@ -2374,15 +2372,16 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       showCollectionsView();
     });
 
-    if(UI.el.collectionEditBtn) if(UI.el.collectionOrderBtn) UI.el.collectionOrderBtn.addEventListener("click", () => {
+    if(UI.el.collectionOrderBtn) UI.el.collectionOrderBtn.addEventListener("click", () => {
       toggleCollectionReorder();
-    });
-
-    UI.el.collectionEditBtn.addEventListener("click", () => {
+    }
+    // Tapping the collection title opens Collection Info (rename/artwork)
+    const cTitle = document.getElementById("collectionNameTitle");
+    if(cTitle) cTitle.addEventListener("click", () => {
       collectionsView = "edit";
       showCollectionsView();
     });
-
+);
     if(UI.el.collectionSaveBtn) UI.el.collectionSaveBtn.addEventListener("click", () => {
       try{
       const name = (UI.el.collectionNameInput.value||"").trim();
