@@ -467,13 +467,23 @@
     .collectionName{ font-weight:900; font-size:13px; }
     .collectionCount{ color:var(--muted); font-size:12px; margin-top:2px; }
 
-    /* Collection reordering (drag/drop) */
+    /* Collection edit mode (reorder + remove) */
     #collectionList.reorderMode .item{
-      grid-template-columns: 26px 48px 1fr;
-      cursor: grab;
+      cursor: default;
+    }
+    .editBar{
+      grid-column: 1 / -1;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-top:6px;
+      padding-top:6px;
+      border-top:1px solid rgba(255,255,255,.10);
     }
     .dragHandle{
-      width:26px;
+      width:34px;
+      height:30px;
       display:flex;
       align-items:center;
       justify-content:center;
@@ -482,7 +492,11 @@
       user-select:none;
       -webkit-user-select:none;
       cursor: grab;
+      border:1px solid rgba(255,255,255,.14);
+      border-radius: 10px;
+      background: rgba(0,0,0,.18);
     }
+    .dragHandle:active{ transform: scale(.98); }
     #collectionList.reorderMode .item.dragging{ opacity:.35; }
     #collectionList.reorderMode .item.dragOver{
       outline: 2px dashed rgba(255,255,255,.35);
@@ -810,7 +824,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.0.51-editmode-clean";
+const APP_VERSION = "v2.0.52-editmode-footer-fix";
 
   function applyAppVersion(){
     try{
@@ -1607,8 +1621,6 @@ function getCollectionMoviesFilteredAndSorted(col){
       div.dataset.id = m.id;
       div.draggable = !!collectionReorderMode;
 
-      const handle = collectionReorderMode ? `<div class="dragHandle" aria-hidden="true">≡</div>` : ``;
-
       const thumb = m.poster
         ? `<img class="thumb" alt="Poster" src="${escH(m.poster)}" />`
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
@@ -1616,16 +1628,19 @@ function getCollectionMoviesFilteredAndSorted(col){
       const year = (m.release || "").trim().slice(0,4);
       const yearSafe = (/^[0-9]{4}$/.test(year) ? year : "—");
 
+      const editBar = collectionReorderMode ? `
+        <div class="editBar">
+          <div class="dragHandle" aria-hidden="true" title="Drag to reorder">≡</div>
+          <button type="button" class="btn small danger removeFromCollectionBtn" title="Remove from collection">Remove</button>
+        </div>` : ``;
+
       div.innerHTML = `
-        ${handle}
         ${thumb}
         <div>
-          <div class="itemTop">
-            <div class="title">${escH(m.title || "(Untitled)")}</div>
-            ${collectionReorderMode ? `<button type="button" class="btn small danger removeFromCollectionBtn" title="Remove from collection">Remove</button>` : ``}
-          </div>
+          <div class="title">${escH(m.title || "(Untitled)")}</div>
           <div class="meta"><b>${escH(yearSafe)}</b></div>
         </div>
+        ${editBar}
       `;
       list.appendChild(div);
     }
@@ -2547,7 +2562,6 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     if(UI.el.collectionPickQ) UI.el.collectionPickQ.addEventListener("input", renderCollectionPick);
 
     if(UI.el.collectionList) UI.el.collectionList.addEventListener("click", (e) => {
-      if(collectionReorderMode) return;
       const card = e.target.closest(".item");
       if(!card) return;
 
@@ -2570,6 +2584,8 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
         }
         return;
       }
+
+      if(collectionReorderMode) return;
 
       closeCollections();
       openModal(card.dataset.id);
