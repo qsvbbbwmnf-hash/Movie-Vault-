@@ -719,8 +719,8 @@
               <div style="font-weight:900; font-size:14px;" id="collectionNameTitle">—</div>
               <div class="hint" id="collectionCountHint">—</div>
             </div>
-            <button class="btn small ghost" id="collectionOrderBtn" type="button">Reorder</button>
-            <button class="btn small ghost" id="collectionEditBtn" type="button">Edit</button>
+            <button class="btn small ghost" id="collectionOrderBtn" type="button">Edit</button>
+            <button class="btn small ghost" id="collectionEditBtn" type="button">Edit Info</button>
           </div>
 
           <div class="row" style="gap:10px;">
@@ -811,7 +811,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.0.48-remove-editmode";
+const APP_VERSION = "v2.0.49-editmode-reorder-remove";
 
   function applyAppVersion(){
     try{
@@ -1642,14 +1642,14 @@ function getCollectionMoviesFilteredAndSorted(col){
     dragMovieId = "";
 
     if(UI.el.collectionOrderBtn){
-      UI.el.collectionOrderBtn.textContent = collectionReorderMode ? "Done" : "Reorder";
+      UI.el.collectionOrderBtn.textContent = collectionReorderMode ? "Done" : "Edit";
     }
     UI.el.collectionQ.disabled = collectionReorderMode;
     UI.el.collectionSort.disabled = collectionReorderMode;
 
     // Re-render to apply draggable + handle UI
     renderCollectionDetail();
-    UI.toast(collectionReorderMode ? "Drag movies to reorder." : "Order saved.");
+    UI.toast(collectionReorderMode ? "Edit mode: drag to reorder or tap Remove." : "Edits saved.");
   }
 
   function renderCollectionPick(){
