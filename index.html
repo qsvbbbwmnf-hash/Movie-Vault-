@@ -807,7 +807,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.0.45-addexisting-titlekey-fix";
+const APP_VERSION = "v2.0.46-addexisting-stayopen";
 
   function applyAppVersion(){
     try{
@@ -1699,9 +1699,9 @@ function getCollectionMoviesFilteredAndSorted(col){
 
           UI.toast("Added to " + col.name + ".");
 
-          // Jump back to detail view and re-render from the updated state
-          collectionsView = "detail";
-          showCollectionsView();
+          // Stay in the picker so you can add multiple movies quickly
+          renderCollectionPick();
+          try{ UI.el.collectionPickQ && UI.el.collectionPickQ.focus(); }catch(_){ }
         }catch(err){
           console.error(err);
           UI.toast("Could not add existing movie: " + (err && err.message ? err.message : String(err)));
