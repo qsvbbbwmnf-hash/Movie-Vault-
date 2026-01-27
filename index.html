@@ -811,7 +811,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.0.47-addexisting-stayopen";
+const APP_VERSION = "v2.0.48-remove-editmode";
 
   function applyAppVersion(){
     try{
@@ -1625,7 +1625,7 @@ function getCollectionMoviesFilteredAndSorted(col){
         <div>
           <div class="itemTop">
             <div class="title">${escH(m.title || "(Untitled)")}</div>
-            ${collectionReorderMode ? `` : `<button type="button" class="btn small danger removeFromCollectionBtn" title="Remove from collection">Remove</button>`}
+            ${collectionReorderMode ? `<button type="button" class="btn small danger removeFromCollectionBtn" title="Remove from collection">Remove</button>` : ``}
           </div>
           <div class="meta"><b>${escH(yearSafe)}</b></div>
         </div>
