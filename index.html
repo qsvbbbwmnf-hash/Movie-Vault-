@@ -720,7 +720,7 @@
               <div class="hint" id="collectionCountHint">—</div>
             </div>
             <button class="btn small ghost" id="collectionOrderBtn" type="button">Edit</button>
-                      </div>
+</div>
 
           <div class="row" style="gap:10px;">
             <button class="btn small primary grow" id="collectionAddExistingBtn" type="button">Add Existing</button>
@@ -810,7 +810,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.0.50-editmode-labels-info";
+const APP_VERSION = "v2.0.51-editmode-clean";
 
   function applyAppVersion(){
     try{
@@ -1121,8 +1121,7 @@ const UI = (() => {
     collectionDetailView: document.getElementById("collectionDetailView"),
     collectionNameTitle: document.getElementById("collectionNameTitle"),
     collectionCountHint: document.getElementById("collectionCountHint"),
-    collectionOrderBtn: document.getElementById("collectionOrderBtn"),
-    collectionAddExistingBtn: document.getElementById("collectionAddExistingBtn"),
+    collectionOrderBtn: document.getElementById("collectionOrderBtn"),    collectionAddExistingBtn: document.getElementById("collectionAddExistingBtn"),
     collectionAddNewBtn: document.getElementById("collectionAddNewBtn"),
     collectionQ: document.getElementById("collectionQ"),
     collectionSort: document.getElementById("collectionSort"),
@@ -2374,14 +2373,20 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
 
     if(UI.el.collectionOrderBtn) UI.el.collectionOrderBtn.addEventListener("click", () => {
       toggleCollectionReorder();
-    }
-    // Tapping the collection title opens Collection Info (rename/artwork)
-    const cTitle = document.getElementById("collectionNameTitle");
-    if(cTitle) cTitle.addEventListener("click", () => {
+    });
+
+    // Tap the collection title to edit collection info (name/art)
+    if(UI.el.collectionNameTitle) UI.el.collectionNameTitle.addEventListener("click", () => {
+      if(collectionsView !== "detail") return;
+      if(!currentCollectionId) return;
+      if(collectionReorderMode){
+        UI.toast("Tap Done first.");
+        return;
+      }
       collectionsView = "edit";
       showCollectionsView();
     });
-);
+
     if(UI.el.collectionSaveBtn) UI.el.collectionSaveBtn.addEventListener("click", () => {
       try{
       const name = (UI.el.collectionNameInput.value||"").trim();
