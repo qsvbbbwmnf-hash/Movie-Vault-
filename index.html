@@ -206,6 +206,10 @@
     .meta{ color:var(--muted); font-size:12px; line-height:1.25; }
     .meta b{ color:rgba(255,255,255,.82); font-weight:800; }
 
+    .itemTop{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+    .itemTop .title{ margin:0; }
+    .removeFromCollectionBtn{ flex:0 0 auto; }
+
     .chipRow{ display:flex; gap:8px; flex-wrap:wrap; margin-top:2px; }
     .chip{
       border:1px solid rgba(255,255,255,.12);
@@ -807,7 +811,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.0.46-addexisting-stayopen";
+const APP_VERSION = "v2.0.47-addexisting-stayopen";
 
   function applyAppVersion(){
     try{
@@ -1619,7 +1623,10 @@ function getCollectionMoviesFilteredAndSorted(col){
         ${handle}
         ${thumb}
         <div>
-          <div class="title">${escH(m.title || "(Untitled)")}</div>
+          <div class="itemTop">
+            <div class="title">${escH(m.title || "(Untitled)")}</div>
+            ${collectionReorderMode ? `` : `<button type="button" class="btn small danger removeFromCollectionBtn" title="Remove from collection">Remove</button>`}
+          </div>
           <div class="meta"><b>${escH(yearSafe)}</b></div>
         </div>
       `;
@@ -2539,6 +2546,27 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       if(collectionReorderMode) return;
       const card = e.target.closest(".item");
       if(!card) return;
+
+      // Remove from collection button (keep modal open)
+      const removeBtn = e.target.closest(".removeFromCollectionBtn");
+      if(removeBtn){
+        e.preventDefault();
+        e.stopPropagation();
+        try{
+          const col = getCollection(currentCollectionId);
+          const movieId = card.dataset.id;
+          const prevColId = getMovie(movieId)?.collectionId || "";
+          setMovieCollection(movieId, "", prevColId);
+          Store.save(state);
+          UI.toast(col ? ("Removed from " + col.name + ".") : "Removed from collection.");
+          renderCollectionDetail();
+        }catch(err){
+          console.error(err);
+          UI.toast("Could not remove: " + (err && err.message ? err.message : String(err)));
+        }
+        return;
+      }
+
       closeCollections();
       openModal(card.dataset.id);
     });
