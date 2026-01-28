@@ -193,7 +193,17 @@
       text-transform:uppercase;
       font-size:12px;
       opacity:.85;
+      position: sticky;
+      top: calc(var(--stickyTop, 6px) + var(--azBarH, 0px) + 8px);
+      z-index: 110;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    
     }
+
+    /* Collections modal: no A–Z bar, so sticky headers should stick to the top of the modal content */
+    #collectionsModal{ --azBarH: 0px; --stickyTop: 0px; }
+
     .item:hover{
       background: rgba(255,255,255,.06);
       border-color: rgba(255,255,255,.22);
@@ -824,7 +834,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.0.52-editmode-footer-fix";
+const APP_VERSION = "v2.0.53-sticky-letter-headers";
 
   function applyAppVersion(){
     try{
@@ -1615,7 +1625,22 @@ function getCollectionMoviesFilteredAndSorted(col){
     list.innerHTML = "";
     UI.el.collectionEmpty.style.display = movies.length ? "none" : "block";
 
+    const showHeaders = (!collectionReorderMode) && !(UI.el.collectionQ && UI.el.collectionQ.value.trim());
+    let prevL = null;
+
     for(const m of movies){
+      if(showHeaders){
+        const L = (typeof letterKeyFromTitle === "function") ? letterKeyFromTitle(m.title) : "#";
+        if(L !== prevL){
+          const h = document.createElement("div");
+          h.className = "azHeader";
+          h.dataset.letter = L;
+          h.textContent = L;
+          list.appendChild(h);
+          prevL = L;
+        }
+      }
+
       const div = document.createElement("div");
       div.className = "item";
       div.dataset.id = m.id;
@@ -1797,6 +1822,13 @@ function getCollectionMoviesFilteredAndSorted(col){
     return '#';
   }
 
+  function setAzBarHeightVar(){
+    // Used to offset sticky letter headers so they sit just beneath the sticky A–Z bar.
+    if(!UI || !UI.el || !UI.el.azBar) return;
+    const h = UI.el.azBar.getBoundingClientRect().height || 0;
+    document.documentElement.style.setProperty('--azBarH', h + 'px');
+  }
+
   function updateAZBar(){
     if(!UI.el.azBar) return;
     const enabled = new Set();
@@ -1812,6 +1844,7 @@ function getCollectionMoviesFilteredAndSorted(col){
     lastAzSig = sig; lastAzActive = act;
 
     UI.renderAZBar(enabled, activeAZ);
+    setAzBarHeightVar();
   }
 
   function pulseAZ(letter){
@@ -2017,6 +2050,7 @@ let editingId = null;
     lastRendered = arr;
     UI.renderList(arr);
     updateAZBar();
+    setAzBarHeightVar();
     scheduleScrollSpy();
     UI.setCount(arr.length);
     persist();
@@ -2644,7 +2678,7 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       });
     // Scroll spy: keep A–Z highlight in sync while scrolling
     window.addEventListener("scroll", scheduleScrollSpy, { passive: true });
-    window.addEventListener("resize", scheduleScrollSpy);
+    window.addEventListener("resize", () => { setAzBarHeightVar(); scheduleScrollSpy(); });
 
     }
 
