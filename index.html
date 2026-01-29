@@ -844,7 +844,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.0.54-sticky-letter-headers";
+const APP_VERSION = "v2.0.55-no-hash-header";
 
   function applyAppVersion(){
     try{
@@ -1282,7 +1282,7 @@ const UI = (() => {
 
     for(const m of movies){
       const L = (typeof letterKeyFromTitle === "function") ? letterKeyFromTitle(m.title) : "#";
-      if(L !== prevL){
+      if(L !== prevL && L !== '#'){
         const h = document.createElement("div");
         h.className = "azHeader";
         h.dataset.letter = L;
@@ -1319,7 +1319,7 @@ const UI = (() => {
     if(!el.azBar) return;
     const letters = [];
     for(let i=65;i<=90;i++) letters.push(String.fromCharCode(i));
-    letters.push('#');
+    // letters.push('#'); // removed: '#' bucket does not jump
 
     const btns = letters.map(L => {
       const enabled = enabledSet && enabledSet.has(L);
@@ -1842,10 +1842,13 @@ function getCollectionMoviesFilteredAndSorted(col){
   function updateAZBar(){
     if(!UI.el.azBar) return;
     const enabled = new Set();
-    for(const m of lastRendered){ enabled.add(letterKeyFromTitle(m.title)); }
+    for(const m of lastRendered){ const L = letterKeyFromTitle(m.title); if(L !== '#') enabled.add(L); }
 
     if(!activeAZ || !enabled.has(activeAZ)){
-      activeAZ = lastRendered.length ? letterKeyFromTitle(lastRendered[0].title) : null;
+      activeAZ = null;
+      for(const m of lastRendered){ const L = letterKeyFromTitle(m.title); if(L !== '#'){ activeAZ = L; break; } }
+      if(!activeAZ && lastRendered.length){ activeAZ = null; }
+    
     }
 
     const sig = Array.from(enabled).sort().join("");
