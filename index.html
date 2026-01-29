@@ -844,7 +844,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.0.56-sticky-headers-0-9-fix";
+const APP_VERSION = "v2.0.54-sticky-letter-headers";
 
   function applyAppVersion(){
     try{
@@ -1286,7 +1286,7 @@ const UI = (() => {
         const h = document.createElement("div");
         h.className = "azHeader";
         h.dataset.letter = L;
-        h.textContent = letterLabel(L);
+        h.textContent = L;
         el.list.appendChild(h);
         prevL = L;
       }
@@ -1324,7 +1324,7 @@ const UI = (() => {
     const btns = letters.map(L => {
       const enabled = enabledSet && enabledSet.has(L);
       const cls = ["azBtn", enabled?"":"disabled", (activeLetter===L)?"active":""].filter(Boolean).join(" ");
-      return `<button class="${cls}" type="button" data-letter="${L}" aria-label="Jump to ${letterLabel(L)}">${letterLabel(L)}</button>`;
+      return `<button class="${cls}" type="button" data-letter="${L}" aria-label="Jump to ${L}">${L}</button>`;
     }).join("");
 
     el.azBar.innerHTML = btns;
@@ -1645,7 +1645,7 @@ function getCollectionMoviesFilteredAndSorted(col){
           const h = document.createElement("div");
           h.className = "azHeader";
           h.dataset.letter = L;
-          h.textContent = letterLabel(L);
+          h.textContent = L;
           list.appendChild(h);
           prevL = L;
         }
@@ -1825,13 +1825,7 @@ function getCollectionMoviesFilteredAndSorted(col){
     return s.replace(/^(the|a|an)\s+/i, '').trim();
   }
 
-  
-  function letterLabel(letter){
-    // Display label for letter buckets. Keep underlying keys stable (#) for scroll/jump logic.
-    return (letter === '#') ? '0–9' : letter;
-  }
-
-function letterKeyFromTitle(t){
+  function letterKeyFromTitle(t){
     const s = titleKeyNoArticles(t);
     const ch = (s[0] || '').toUpperCase();
     if(ch >= 'A' && ch <= 'Z') return ch;
