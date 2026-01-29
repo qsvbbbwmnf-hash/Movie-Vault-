@@ -844,7 +844,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.0.55-sticky-headers-0-9";
+const APP_VERSION = "v2.0.56-sticky-headers-0-9-fix";
 
   function applyAppVersion(){
     try{
@@ -1825,18 +1825,18 @@ function getCollectionMoviesFilteredAndSorted(col){
     return s.replace(/^(the|a|an)\s+/i, '').trim();
   }
 
-  function letterKeyFromTitle(t){
+  
+  function letterLabel(letter){
+    // Display label for letter buckets. Keep underlying keys stable (#) for scroll/jump logic.
+    return (letter === '#') ? '0–9' : letter;
+  }
+
+function letterKeyFromTitle(t){
     const s = titleKeyNoArticles(t);
     const ch = (s[0] || '').toUpperCase();
     if(ch >= 'A' && ch <= 'Z') return ch;
     return '#';
   }
-
-  // Display label for the special non-letter bucket.
-  function letterLabel(L){
-    return (L === '#') ? '0–9' : L;
-  }
-
 
   function setAzBarHeightVar(){
     // Used to offset sticky letter headers so they sit just beneath the sticky A–Z bar.
