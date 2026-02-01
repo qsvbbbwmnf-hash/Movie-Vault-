@@ -845,7 +845,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.2.4-delete-collection-button-fix";
+const APP_VERSION = "v2.2.5-delete-button-wired";
 
   function applyAppVersion(){
     try{
@@ -1156,7 +1156,8 @@ const UI = (() => {
     collectionDetailView: document.getElementById("collectionDetailView"),
     collectionNameTitle: document.getElementById("collectionNameTitle"),
     collectionCountHint: document.getElementById("collectionCountHint"),
-    collectionOrderBtn: document.getElementById("collectionOrderBtn"),    collectionAddExistingBtn: document.getElementById("collectionAddExistingBtn"),
+    collectionOrderBtn: document.getElementById("collectionOrderBtn"),
+    collectionDeleteQuickBtn: document.getElementById("collectionDeleteQuickBtn"),    collectionAddExistingBtn: document.getElementById("collectionAddExistingBtn"),
     collectionAddNewBtn: document.getElementById("collectionAddNewBtn"),
     collectionQ: document.getElementById("collectionQ"),
     collectionSort: document.getElementById("collectionSort"),
