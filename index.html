@@ -844,7 +844,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.2.1-collections-addflow";
+const APP_VERSION = "v2.2.2-collections-delete-fix";
 
   function applyAppVersion(){
     try{
@@ -2540,12 +2540,15 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       if(!ok) return;
 
       // unfile movies
-      for(const m of state.movies){
+      for(const m of (state.movies||[])){
         if((m.collectionId||"") === col.id) m.collectionId = "";
       }
       // remove collection
       state.collections = state.collections.filter(c => c.id !== col.id);
 
+
+      // refresh collections UI immediately
+      try{ renderCollectionsGrid(); }catch(e){}
       Store.save(state);
       refreshCollectionSelectOptions(UI.el.collectionSelect.value);
       UI.toast("Collection deleted.");
