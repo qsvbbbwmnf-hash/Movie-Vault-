@@ -847,7 +847,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.2.1-collections-stable-addflow";
+const APP_VERSION = "v2.2.2-collections-stable-addflow-closefix";
 
   function applyAppVersion(){
     try{
@@ -2097,7 +2097,7 @@ let editingId = null;
 
   
   function closeFormAndReturnIfNeeded(){
-    closeFormAndReturnIfNeeded();
+    closeFormModal();
     if(formReturnCollectionId){
       const id = formReturnCollectionId;
       formReturnCollectionId = "";
