@@ -523,9 +523,6 @@
       outline-offset: 3px;
     }
 
-
-    /* locked collection select in collection-add flow */
-    select.locked{ opacity:.85; }
 </style>
 </head>
 <body>
@@ -847,7 +844,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.2.2-collections-stable-addflow-closefix";
+const APP_VERSION = "v2.2.1-collections-addflow";
 
   function applyAppVersion(){
     try{
@@ -1423,16 +1420,20 @@ const App = (() => {
   }
 
   // Collections modal view state
-  let collectionsView = "list"; // list | detail | edit | pick
+  let collectionsView = "list";
+  let returnToCollectionId = ""; // when Add New is launched from a collection
+  function clearCollectionAddFlow(){
+    returnToCollectionId = "";
+    if(UI.el.collectionSelect){
+      UI.el.collectionSelect.disabled = false;
+      UI.el.collectionSelect.title = "";
+    }
+  }
+ // list | detail | edit | pick
   let currentCollectionId = "";
   let tempCollectionArtwork = "";
   let collectionReorderMode = false;
   let dragMovieId = "";
-
-  // Form return context (when adding from a collection)
-  let formReturnCollectionId = "";
-  let formLockCollection = false;
-
 
   function openCollections(){
     collectionsView = "list";
@@ -1441,19 +1442,18 @@ const App = (() => {
     UI.el.collectionsModal.classList.add("open");
   }
 
-  function closeCollections(){
-    UI.el.collectionsModal.classList.remove("open");
-  }
-
-  
-  function openCollectionsToDetail(id){
+  function openCollectionsDetail(collectionId){
     collectionsView = "detail";
-    currentCollectionId = String(id||"");
+    currentCollectionId = String(collectionId||"");
     showCollectionsView();
     UI.el.collectionsModal.classList.add("open");
   }
 
-function showCollectionsView(){
+  function closeCollections(){
+    UI.el.collectionsModal.classList.remove("open");
+  }
+
+  function showCollectionsView(){
     const el = UI.el;
     // default hide all
     el.collectionsListView.style.display = "none";
@@ -2095,20 +2095,7 @@ let editingId = null;
     if(UI.el.saveBtn) UI.el.saveBtn.disabled = true;
   }
 
-  
-  function closeFormAndReturnIfNeeded(){
-    closeFormModal();
-    if(formReturnCollectionId){
-      const id = formReturnCollectionId;
-      formReturnCollectionId = "";
-      const wasLocked = formLockCollection;
-      formLockCollection = false;
-      if(UI.el.collectionSelect){ UI.el.collectionSelect.disabled = false; UI.el.collectionSelect.classList.remove("locked"); }
-      openCollectionsToDetail(id);
-    }
-  }
-
-function saveMovie(){
+  function saveMovie(){
     const title = UI.el.title.value.trim();
     if(!title){
       UI.toast("Title is required.");
@@ -2143,15 +2130,29 @@ function saveMovie(){
       // After updating, reset back to Add mode (less confusion, matches your workflow)
       resetForm();
       render();
-      closeFormAndReturnIfNeeded();
+      const backId = returnToCollectionId;
+      UI.closeFormModal();
       UI.toast("Updated.");
+      if(backId){
+        clearCollectionAddFlow();
+        openCollectionsDetail(backId);
+      }else{
+        clearCollectionAddFlow();
+      }
     }else{
       state.movies.unshift(movie);
       if(nextCollectionId) setMovieCollection(movie.id, nextCollectionId, "");
       resetForm(); // auto-reset after adding
       render();
-      closeFormAndReturnIfNeeded();
+      const backId = returnToCollectionId;
+      UI.closeFormModal();
       UI.toast("Added.");
+      if(backId){
+        clearCollectionAddFlow();
+        openCollectionsDetail(backId);
+      }else{
+        clearCollectionAddFlow();
+      }
     }
   }
 
@@ -2163,7 +2164,7 @@ function saveMovie(){
     const out = deleteMovieById(m.id);
     resetForm();
     render();
-    closeFormAndReturnIfNeeded();
+    UI.closeFormModal();
     if(out.deleted) offerUndo(out.deleted, out.index);
   }
 
@@ -2397,11 +2398,29 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     }
 
     if(UI.el.formCloseBtn){
-      UI.el.formCloseBtn.addEventListener("click", () => closeFormAndReturnIfNeeded());
+      UI.el.formCloseBtn.addEventListener("click", () => {
+        const backId = returnToCollectionId;
+        UI.closeFormModal();
+        if(backId){
+          clearCollectionAddFlow();
+          openCollectionsDetail(backId);
+        }else{
+          clearCollectionAddFlow();
+        }
+      });
     }
     if(UI.el.formModal){
       UI.el.formModal.addEventListener("click", (e) => {
-        if(e.target === UI.el.formModal) closeFormAndReturnIfNeeded();
+        if(e.target === UI.el.formModal){
+          const backId = returnToCollectionId;
+          UI.closeFormModal();
+          if(backId){
+            clearCollectionAddFlow();
+            openCollectionsDetail(backId);
+          }else{
+            clearCollectionAddFlow();
+          }
+        }
       });
     }
 
@@ -2553,19 +2572,18 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       showCollectionsView();
     });
 
-    if(UI.el.collectionAddNewBtn) UI.el.collectionAddNewBtn.addEventListener("click", () => {
+        if(UI.el.collectionAddNewBtn) UI.el.collectionAddNewBtn.addEventListener("click", () => {
       const col = getCollection(currentCollectionId);
       if(!col) return;
-      // mark return context so Save/Cancel returns to this collection
-      formReturnCollectionId = col.id;
-      formLockCollection = true;
+      // Remember where we came from so Save/Close can bring us back here
+      returnToCollectionId = col.id;
       closeCollections();
       resetForm();
       refreshCollectionSelectOptions(col.id);
       if(UI.el.collectionSelect){
         UI.el.collectionSelect.value = col.id;
-        UI.el.collectionSelect.disabled = true;
-        UI.el.collectionSelect.classList.add("locked");
+        UI.el.collectionSelect.disabled = true; // locked so it can’t be mis-filed
+        UI.el.collectionSelect.title = "Locked while adding to this collection";
       }
       UI.openFormModal();
       UI.el.title && UI.el.title.focus();
@@ -2747,7 +2765,7 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     document.addEventListener("keydown", (e) => {
       if(e.key === "Escape"){
         if(UI.el.modal.classList.contains("open")){ modalId=null; UI.closeModal(); }
-        if(UI.el.formModal && UI.el.formModal.classList.contains("open")){ closeFormAndReturnIfNeeded(); }
+        if(UI.el.formModal && UI.el.formModal.classList.contains("open")){ UI.closeFormModal(); }
         if(UI.el.keysModal && UI.el.keysModal.classList.contains("open")){ UI.closeKeysModal(); }
         if(UI.el.pickModal && UI.el.pickModal.classList.contains("open")){ UI.closePickModal(); }
       }
