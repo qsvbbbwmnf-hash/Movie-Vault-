@@ -754,6 +754,7 @@
               <div class="hint" id="collectionCountHint">—</div>
             </div>
             <button class="btn small ghost" id="collectionOrderBtn" type="button">Edit</button>
+            <button class="btn small danger" id="collectionDeleteQuickBtn" type="button">Delete</button>
 </div>
 
           <div class="row" style="gap:10px;">
@@ -844,7 +845,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.0.2-experimental-addflow-closefix";
+const APP_VERSION = "v3.0.3-experimental-delete-collection-button";
 
   function applyAppVersion(){
     try{
@@ -2480,6 +2481,42 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     if(UI.el.collectionOrderBtn) UI.el.collectionOrderBtn.addEventListener("click", () => {
       toggleCollectionReorder();
     });
+    if(UI.el.collectionDeleteQuickBtn) UI.el.collectionDeleteQuickBtn.addEventListener("click", () => {
+      // prevent accidental delete while in reorder mode
+      if(typeof collectionReorderMode !== "undefined" && collectionReorderMode){
+        UI.toast("Tap Done first.");
+        return;
+      }
+      const col = getCollection(currentCollectionId);
+      if(!col){
+        collectionsView = "list";
+        currentCollectionId = "";
+        showCollectionsView();
+        return;
+      }
+      const ok = confirm(`Delete collection “${col.name}”? Movies will NOT be deleted.`);
+      if(!ok) return;
+
+      // Unfile movies in this collection
+      for(const m of (state.movies||[])){
+        if((m.collectionId||"") === col.id) m.collectionId = "";
+      }
+
+      // Remove collection itself
+      state.collections = (state.collections||[]).filter(c => c.id !== col.id);
+
+      // Refresh UI + persist
+      try{ renderCollectionsGrid(); }catch(e){}
+      try{ refreshCollectionSelectOptions(); }catch(e){}
+      Store.save(state);
+
+      UI.toast("Collection deleted.");
+      collectionsView = "list";
+      currentCollectionId = "";
+      showCollectionsView();
+      render();
+    });
+
 
     // Tap the collection title to edit collection info (name/art)
     if(UI.el.collectionNameTitle) UI.el.collectionNameTitle.addEventListener("click", () => {
