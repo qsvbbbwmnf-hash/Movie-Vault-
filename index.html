@@ -902,7 +902,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.0-collections-browser";
+const APP_VERSION = "v3.1.1-collections-browser-hotfix";
 
   function applyAppVersion(){
     try{
@@ -2828,7 +2828,7 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       showCollectionsView();
     });
 
-    collectionQ) UI.el.collectionQ.addEventListener("input", renderCollectionDetail);
+    if(UI.el.collectionQ) UI.el.collectionQ.addEventListener("input", renderCollectionDetail);
     if(UI.el.collectionSort) UI.el.collectionSort.addEventListener("change", renderCollectionDetail);
     // Drag/drop ordering inside a collection (custom order)
     UI.el.collectionList.addEventListener("dragstart", (e) => {
