@@ -845,7 +845,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.0.3-experimental-delete-collection-button";
+const APP_VERSION = "v3.0.4-delete-collection-button-delegated";
 
   function applyAppVersion(){
     try{
@@ -2481,41 +2481,7 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     if(UI.el.collectionOrderBtn) UI.el.collectionOrderBtn.addEventListener("click", () => {
       toggleCollectionReorder();
     });
-    if(UI.el.collectionDeleteQuickBtn) UI.el.collectionDeleteQuickBtn.addEventListener("click", () => {
-      // prevent accidental delete while in reorder mode
-      if(typeof collectionReorderMode !== "undefined" && collectionReorderMode){
-        UI.toast("Tap Done first.");
-        return;
-      }
-      const col = getCollection(currentCollectionId);
-      if(!col){
-        collectionsView = "list";
-        currentCollectionId = "";
-        showCollectionsView();
-        return;
-      }
-      const ok = confirm(`Delete collection “${col.name}”? Movies will NOT be deleted.`);
-      if(!ok) return;
-
-      // Unfile movies in this collection
-      for(const m of (state.movies||[])){
-        if((m.collectionId||"") === col.id) m.collectionId = "";
-      }
-
-      // Remove collection itself
-      state.collections = (state.collections||[]).filter(c => c.id !== col.id);
-
-      // Refresh UI + persist
-      try{ renderCollectionsGrid(); }catch(e){}
-      try{ refreshCollectionSelectOptions(); }catch(e){}
-      Store.save(state);
-
-      UI.toast("Collection deleted.");
-      collectionsView = "list";
-      currentCollectionId = "";
-      showCollectionsView();
-      render();
-    });
+    // (v3.0.4) delete button uses delegated click handler (see below)
 
 
     // Tap the collection title to edit collection info (name/art)
@@ -2740,7 +2706,45 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
         UI.el.toolsBtn.setAttribute("aria-expanded", open ? "true" : "false");
       });
       document.addEventListener("click", () => closeToolsMenu());
-      document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeToolsMenu(); });
+      
+  // v3.0.4: delegated handler for Delete Collection button (works even when collection detail is re-rendered)
+  document.addEventListener("click", (e) => {
+    const btn = e.target && (e.target.closest ? e.target.closest("#collectionDeleteQuickBtn") : null);
+    if(!btn) return;
+    e.preventDefault();
+
+    // prevent accidental delete while in reorder mode
+    if(typeof collectionReorderMode !== "undefined" && collectionReorderMode){
+      UI.toast("Tap Done first.");
+      return;
+    }
+    const col = getCollection(currentCollectionId);
+    if(!col){
+      collectionsView = "list";
+      currentCollectionId = "";
+      showCollectionsView();
+      return;
+    }
+    const ok = confirm(`Delete collection “${col.name}”? Movies will NOT be deleted.`);
+    if(!ok) return;
+
+    for(const m of (state.movies||[])){
+      if((m.collectionId||"") === col.id) m.collectionId = "";
+    }
+    state.collections = (state.collections||[]).filter(c => c.id !== col.id);
+
+    try{ renderCollectionsGrid(); }catch(err){}
+    try{ refreshCollectionSelectOptions(); }catch(err){}
+    Store.save(state);
+
+    UI.toast("Collection deleted.");
+    collectionsView = "list";
+    currentCollectionId = "";
+    showCollectionsView();
+    render();
+  }, {passive:false});
+
+document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeToolsMenu(); });
       UI.el.toolsMenu.addEventListener("click", (e) => e.stopPropagation());
     }
 
