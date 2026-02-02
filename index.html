@@ -754,7 +754,6 @@
               <div class="hint" id="collectionCountHint">—</div>
             </div>
             <button class="btn small ghost" id="collectionOrderBtn" type="button">Edit</button>
-            <button class="btn small danger" id="collectionDeleteQuickBtn" type="button">Delete</button>
 </div>
 
           <div class="row" style="gap:10px;">
@@ -845,7 +844,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v2.2.5-delete-button-wired";
+const APP_VERSION = "v3.0.0-experimental-hierarchy-prep";
 
   function applyAppVersion(){
     try{
@@ -1156,8 +1155,7 @@ const UI = (() => {
     collectionDetailView: document.getElementById("collectionDetailView"),
     collectionNameTitle: document.getElementById("collectionNameTitle"),
     collectionCountHint: document.getElementById("collectionCountHint"),
-    collectionOrderBtn: document.getElementById("collectionOrderBtn"),
-    collectionDeleteQuickBtn: document.getElementById("collectionDeleteQuickBtn"),    collectionAddExistingBtn: document.getElementById("collectionAddExistingBtn"),
+    collectionOrderBtn: document.getElementById("collectionOrderBtn"),    collectionAddExistingBtn: document.getElementById("collectionAddExistingBtn"),
     collectionAddNewBtn: document.getElementById("collectionAddNewBtn"),
     collectionQ: document.getElementById("collectionQ"),
     collectionSort: document.getElementById("collectionSort"),
@@ -1422,16 +1420,7 @@ const App = (() => {
   }
 
   // Collections modal view state
-  let collectionsView = "list";
-  let returnToCollectionId = ""; // when Add New is launched from a collection
-  function clearCollectionAddFlow(){
-    returnToCollectionId = "";
-    if(UI.el.collectionSelect){
-      UI.el.collectionSelect.disabled = false;
-      UI.el.collectionSelect.title = "";
-    }
-  }
- // list | detail | edit | pick
+  let collectionsView = "list"; // list | detail | edit | pick
   let currentCollectionId = "";
   let tempCollectionArtwork = "";
   let collectionReorderMode = false;
@@ -1440,13 +1429,6 @@ const App = (() => {
   function openCollections(){
     collectionsView = "list";
     currentCollectionId = "";
-    showCollectionsView();
-    UI.el.collectionsModal.classList.add("open");
-  }
-
-  function openCollectionsDetail(collectionId){
-    collectionsView = "detail";
-    currentCollectionId = String(collectionId||"");
     showCollectionsView();
     UI.el.collectionsModal.classList.add("open");
   }
@@ -2132,29 +2114,15 @@ let editingId = null;
       // After updating, reset back to Add mode (less confusion, matches your workflow)
       resetForm();
       render();
-      const backId = returnToCollectionId;
       UI.closeFormModal();
       UI.toast("Updated.");
-      if(backId){
-        clearCollectionAddFlow();
-        openCollectionsDetail(backId);
-      }else{
-        clearCollectionAddFlow();
-      }
     }else{
       state.movies.unshift(movie);
       if(nextCollectionId) setMovieCollection(movie.id, nextCollectionId, "");
       resetForm(); // auto-reset after adding
       render();
-      const backId = returnToCollectionId;
       UI.closeFormModal();
       UI.toast("Added.");
-      if(backId){
-        clearCollectionAddFlow();
-        openCollectionsDetail(backId);
-      }else{
-        clearCollectionAddFlow();
-      }
     }
   }
 
@@ -2400,29 +2368,11 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     }
 
     if(UI.el.formCloseBtn){
-      UI.el.formCloseBtn.addEventListener("click", () => {
-        const backId = returnToCollectionId;
-        UI.closeFormModal();
-        if(backId){
-          clearCollectionAddFlow();
-          openCollectionsDetail(backId);
-        }else{
-          clearCollectionAddFlow();
-        }
-      });
+      UI.el.formCloseBtn.addEventListener("click", () => UI.closeFormModal());
     }
     if(UI.el.formModal){
       UI.el.formModal.addEventListener("click", (e) => {
-        if(e.target === UI.el.formModal){
-          const backId = returnToCollectionId;
-          UI.closeFormModal();
-          if(backId){
-            clearCollectionAddFlow();
-            openCollectionsDetail(backId);
-          }else{
-            clearCollectionAddFlow();
-          }
-        }
+        if(e.target === UI.el.formModal) UI.closeFormModal();
       });
     }
 
@@ -2487,34 +2437,6 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       toggleCollectionReorder();
     });
 
-    if(UI.el.collectionDeleteQuickBtn) UI.el.collectionDeleteQuickBtn.addEventListener("click", () => {
-      if(collectionReorderMode){
-        UI.toast("Tap Done first.");
-        return;
-      }
-      const col = getCollection(currentCollectionId);
-      if(!col) { collectionsView = "list"; currentCollectionId = ""; showCollectionsView(); return; }
-      const ok = confirm(`Delete collection “${col.name}”? Movies will NOT be deleted.`);
-      if(!ok) return;
-
-      // unfile movies
-      for(const m of (state.movies||[])){
-        if((m.collectionId||"") === col.id) m.collectionId = "";
-      }
-      // remove collection
-      state.collections = (state.collections||[]).filter(c => c.id !== col.id);
-
-      // refresh UI immediately
-      try{ renderCollectionsGrid(); }catch(e){}
-      Store.save(state);
-      refreshCollectionSelectOptions(UI.el.collectionSelect && UI.el.collectionSelect.value ? UI.el.collectionSelect.value : "");
-      UI.toast("Collection deleted.");
-      collectionsView = "list";
-      currentCollectionId = "";
-      showCollectionsView();
-      render();
-    });
-
     // Tap the collection title to edit collection info (name/art)
     if(UI.el.collectionNameTitle) UI.el.collectionNameTitle.addEventListener("click", () => {
       if(collectionsView !== "detail") return;
@@ -2544,6 +2466,7 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
           id,
           name,
           artwork: tempCollectionArtwork || "",
+          parentId: null,
           sortMode: "custom",
           customOrder: [],
           createdAt: Date.now(),
@@ -2570,15 +2493,12 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       if(!ok) return;
 
       // unfile movies
-      for(const m of (state.movies||[])){
+      for(const m of state.movies){
         if((m.collectionId||"") === col.id) m.collectionId = "";
       }
       // remove collection
       state.collections = state.collections.filter(c => c.id !== col.id);
 
-
-      // refresh collections UI immediately
-      try{ renderCollectionsGrid(); }catch(e){}
       Store.save(state);
       refreshCollectionSelectOptions(UI.el.collectionSelect.value);
       UI.toast("Collection deleted.");
@@ -2605,19 +2525,13 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       showCollectionsView();
     });
 
-        if(UI.el.collectionAddNewBtn) UI.el.collectionAddNewBtn.addEventListener("click", () => {
+    if(UI.el.collectionAddNewBtn) UI.el.collectionAddNewBtn.addEventListener("click", () => {
       const col = getCollection(currentCollectionId);
       if(!col) return;
-      // Remember where we came from so Save/Close can bring us back here
-      returnToCollectionId = col.id;
       closeCollections();
       resetForm();
       refreshCollectionSelectOptions(col.id);
-      if(UI.el.collectionSelect){
-        UI.el.collectionSelect.value = col.id;
-        UI.el.collectionSelect.disabled = true; // locked so it can’t be mis-filed
-        UI.el.collectionSelect.title = "Locked while adding to this collection";
-      }
+      if(UI.el.collectionSelect) UI.el.collectionSelect.value = col.id;
       UI.openFormModal();
       UI.el.title && UI.el.title.focus();
       syncSaveEnabled();
