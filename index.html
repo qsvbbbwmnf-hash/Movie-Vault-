@@ -844,7 +844,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.0.0-experimental-hierarchy-prep";
+const APP_VERSION = "v3.0.1-experimental-addflow-return";
 
   function applyAppVersion(){
     try{
@@ -1332,6 +1332,23 @@ const UI = (() => {
 
   function openFormModal(){ el.formModal.classList.add("open"); }
   function closeFormModal(){ el.formModal.classList.remove("open"); }
+
+  function openCollectionsToDetail(collectionId){
+    collectionsView = "detail";
+    currentCollectionId = String(collectionId||"");
+    showCollectionsView();
+    UI.el.collectionsModal.classList.add("open");
+  }
+
+  function closeFormAndReturnIfNeeded(){
+    UI.closeFormModal();
+    if(returnToCollectionId){
+      const target = returnToCollectionId;
+      returnToCollectionId = "";
+      openCollectionsToDetail(target);
+    }
+  }
+
 
   function openKeysModal(){ el.keysModal && el.keysModal.classList.add("open"); }
   function closeKeysModal(){ el.keysModal && el.keysModal.classList.remove("open"); }
@@ -1935,6 +1952,10 @@ let editingId = null;
   let currentPoster = "";
   let currentFullCast = "";
 
+  // v3 experimental: remember collection context when adding a new movie from inside a collection
+  let returnToCollectionId = "";
+
+
   let lastDeleted = null;
   let undoTimer = null;
 
@@ -2071,6 +2092,11 @@ let editingId = null;
 
   function resetForm(){
     editingId = null;
+    // unlock collection selector by default; special flows can lock it
+    if(UI.el.collectionSelect){
+      UI.el.collectionSelect.disabled = false;
+      UI.el.collectionSelect.classList.remove('locked');
+    }
     setPoster("");
     currentFullCast = "";
     UI.clearForm();
@@ -2114,14 +2140,14 @@ let editingId = null;
       // After updating, reset back to Add mode (less confusion, matches your workflow)
       resetForm();
       render();
-      UI.closeFormModal();
+      closeFormAndReturnIfNeeded();
       UI.toast("Updated.");
     }else{
       state.movies.unshift(movie);
       if(nextCollectionId) setMovieCollection(movie.id, nextCollectionId, "");
       resetForm(); // auto-reset after adding
       render();
-      UI.closeFormModal();
+      closeFormAndReturnIfNeeded();
       UI.toast("Added.");
     }
   }
@@ -2134,7 +2160,7 @@ let editingId = null;
     const out = deleteMovieById(m.id);
     resetForm();
     render();
-    UI.closeFormModal();
+    closeFormAndReturnIfNeeded();
     if(out.deleted) offerUndo(out.deleted, out.index);
   }
 
@@ -2368,11 +2394,11 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     }
 
     if(UI.el.formCloseBtn){
-      UI.el.formCloseBtn.addEventListener("click", () => UI.closeFormModal());
+      UI.el.formCloseBtn.addEventListener("click", () => closeFormAndReturnIfNeeded());
     }
     if(UI.el.formModal){
       UI.el.formModal.addEventListener("click", (e) => {
-        if(e.target === UI.el.formModal) UI.closeFormModal();
+        if(e.target === UI.el.formModal) closeFormAndReturnIfNeeded();
       });
     }
 
@@ -2528,10 +2554,16 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     if(UI.el.collectionAddNewBtn) UI.el.collectionAddNewBtn.addEventListener("click", () => {
       const col = getCollection(currentCollectionId);
       if(!col) return;
+      // remember where to return after saving/canceling
+      returnToCollectionId = col.id;
       closeCollections();
       resetForm();
       refreshCollectionSelectOptions(col.id);
       if(UI.el.collectionSelect) UI.el.collectionSelect.value = col.id;
+      if(UI.el.collectionSelect){
+        UI.el.collectionSelect.disabled = true;
+        UI.el.collectionSelect.classList.add('locked');
+      }
       UI.openFormModal();
       UI.el.title && UI.el.title.focus();
       syncSaveEnabled();
