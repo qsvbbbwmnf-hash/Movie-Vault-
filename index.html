@@ -451,6 +451,54 @@
       grid-template-columns: repeat(auto-fit, minmax(220px, 260px));
       justify-content: center;
     }
+
+    .crumbs{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      align-items:center;
+      padding:8px 10px;
+      border:1px solid rgba(255,255,255,.12);
+      border-radius: 14px;
+      background: rgba(0,0,0,.22);
+      margin-bottom: 10px;
+      position: sticky;
+      top: 0px;
+      z-index: 5;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .crumb{
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.05);
+      color: rgba(255,255,255,.85);
+      padding:6px 10px;
+      border-radius: 999px;
+      font-size:12px;
+      font-weight:900;
+      cursor:pointer;
+      user-select:none;
+    }
+    .crumb:active{ transform: scale(.98); }
+    .crumb.sep{
+      border:none;
+      background: transparent;
+      padding: 0 2px;
+      color: rgba(255,255,255,.55);
+      cursor: default;
+      font-weight:900;
+    }
+    .subcolsWrap{
+      margin: 6px 0 14px;
+    }
+    .subcolsTitle{
+      font-weight:900;
+      font-size:12px;
+      letter-spacing:.14em;
+      text-transform:uppercase;
+      color: rgba(255,255,255,.72);
+      margin: 0 0 8px;
+    }
     .collectionCard{
       border:1px solid rgba(255,255,255,.12);
       border-radius: 14px;
@@ -757,10 +805,19 @@
             <button class="btn small danger" id="collectionDeleteQuickBtn" type="button">Delete</button>
 </div>
 
-          <div class="row" style="gap:10px;">
+          <div class="row" style="gap:10px; flex-wrap:wrap;">
             <button class="btn small primary grow" id="collectionAddExistingBtn" type="button">Add Existing</button>
             <button class="btn small ghost grow" id="collectionAddNewBtn" type="button">Add New</button>
+            <button class="btn small ghost grow" id="collectionAddSubBtn" type="button">New Sub-Collection</button>
           </div>
+          <div id="collectionCrumbs" class="crumbs" aria-label="Collection breadcrumbs"></div>
+
+          <div class="subcolsWrap">
+            <div class="subcolsTitle">Folders</div>
+            <div id="subcollectionsGrid" class="collectionsGrid"></div>
+            <div id="subcollectionsEmpty" class="hint" style="display:none; padding:10px 2px;">No sub-collections.</div>
+          </div>
+
 
           <div class="row" style="gap:10px;">
             <input id="collectionQ" placeholder="Search within this collection…" class="grow" />
@@ -845,7 +902,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.0.4-delete-collection-button-delegated";
+const APP_VERSION = "v3.1.0-collections-browser";
 
   function applyAppVersion(){
     try{
@@ -1036,6 +1093,7 @@ const Store = (() => {
       if(!Array.isArray(parsed.collections)) parsed.collections = [];
       parsed.collections = parsed.collections.map(c => ({
         id: String(c && c.id || ""),
+        parentId: String(c && c.parentId || ""),
         name: String(c && c.name || "").trim(),
         artwork: String(c && c.artwork || ""),
         sortMode: String(c && c.sortMode || "custom"),
@@ -1174,6 +1232,12 @@ const UI = (() => {
     collectionPickQ: document.getElementById("collectionPickQ"),
     collectionPickList: document.getElementById("collectionPickList"),
     collectionPickEmpty: document.getElementById("collectionPickEmpty"),
+
+    // collections browser (step 2)
+    collectionCrumbs: document.getElementById("collectionCrumbs"),
+    subcollectionsGrid: document.getElementById("subcollectionsGrid"),
+    subcollectionsEmpty: document.getElementById("subcollectionsEmpty"),
+    collectionAddSubBtn: document.getElementById("collectionAddSubBtn"),
 
     // modal
     modal: document.getElementById("modal"),
@@ -1396,12 +1460,103 @@ const App = (() => {
   function escH(s){ return String(s ?? "").replace(/[&<>"\']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","\'":"&#39;" }[c])); }
   function getCollection(id){ return state.collections.find(c => c.id === id) || null; }
 
+  function getChildCollections(parentId){
+    const pid = String(parentId||"");
+    return (state.collections || []).filter(c => String(c.parentId||"") === pid);
+  }
+
+  function getCollectionPath(collectionId){
+    // Returns [{id,name}, ...] from root to current. Guards against loops.
+    const out = [];
+    const seen = new Set();
+    let cur = getCollection(collectionId);
+    while(cur && !seen.has(cur.id)){
+      seen.add(cur.id);
+      out.push({ id: cur.id, name: cur.name });
+      cur = cur.parentId ? getCollection(cur.parentId) : null;
+    }
+    return out.reverse();
+  }
+
+  function renderCollectionBreadcrumbs(collectionId){
+    const box = UI.el.collectionCrumbs;
+    if(!box) return;
+    const path = getCollectionPath(collectionId);
+    // Always start at Collections root
+    const parts = [{ id: "", name: "Collections" }, ...path];
+
+    box.innerHTML = "";
+    parts.forEach((p, i) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "crumb" + (p.id === "" && i===0 ? "" : "");
+      btn.textContent = p.name;
+      btn.dataset.id = p.id;
+      box.appendChild(btn);
+      if(i < parts.length-1){
+        const sep = document.createElement("span");
+        sep.className = "crumb sep";
+        sep.textContent = "›";
+        box.appendChild(sep);
+      }
+    });
+  }
+
+  function renderSubcollections(parentId){
+    const grid = UI.el.subcollectionsGrid;
+    const empty = UI.el.subcollectionsEmpty;
+    if(!grid || !empty) return;
+    grid.innerHTML = "";
+
+    const subs = getChildCollections(parentId).slice().sort((a,b)=>
+      (a.name||"").localeCompare(b.name||"", undefined, { sensitivity:"base" })
+    );
+
+    empty.style.display = subs.length ? "none" : "block";
+
+    for(const c of subs){
+      const card = document.createElement("div");
+      card.className = "collectionCard";
+      card.dataset.id = c.id;
+
+      let artNode;
+      if(c.artwork){
+        artNode = document.createElement("img");
+        artNode.className = "collectionArt";
+        artNode.alt = "Artwork";
+        artNode.src = c.artwork;
+      }else{
+        artNode = document.createElement("div");
+        artNode.className = "collectionArt ph";
+        artNode.innerHTML = "NO<br/>ART";
+      }
+
+      const meta = document.createElement("div");
+      const name = document.createElement("div");
+      name.className = "collectionName";
+      name.textContent = c.name;
+
+      const count = document.createElement("div");
+      count.className = "collectionCount";
+      const n = state.movies.filter(m => (m.collectionId||"") === c.id).length;
+      count.textContent = n + (n===1 ? " movie" : " movies");
+
+      meta.appendChild(name);
+      meta.appendChild(count);
+
+      card.appendChild(artNode);
+      card.appendChild(meta);
+
+      grid.appendChild(card);
+    }
+  }
+
   function refreshCollectionSelectOptions(selectedId){
     if(!UI.el.collectionSelect) return;
     const sel = UI.el.collectionSelect;
     const keep = (selectedId !== undefined) ? String(selectedId||"") : String(sel.value||"");
     sel.innerHTML = '<option value="">None</option>';
-    const cols = (state.collections || []).slice().sort((a,b)=> (a.name||"").localeCompare(b.name||"", undefined, {sensitivity:"base"}));
+    const cols = (state.collections || []).filter(c => !(c.parentId||"")).slice().sort((a,b)=> (a.name||"").localeCompare(b.name||"", undefined, {sensitivity:"base"}));
     for(const c of cols){
       const opt = document.createElement("option");
       opt.value = c.id;
@@ -1440,7 +1595,10 @@ const App = (() => {
   // Collections modal view state
   let collectionsView = "list"; // list | detail | edit | pick
   let currentCollectionId = "";
+  let collectionsReturnToId = "";
+  let pendingNewCollectionParentId = "";
   let tempCollectionArtwork = "";
+  let tempCollectionParentId = "";
   let collectionReorderMode = false;
   let dragMovieId = "";
 
@@ -1492,11 +1650,20 @@ const App = (() => {
     }
 
     const col = getCollection(currentCollectionId);
+    // Keep breadcrumbs + sub-collections fresh
+    if(UI.el.collectionCrumbs) renderCollectionBreadcrumbs(col ? col.id : "");
+    if(col && UI.el.subcollectionsGrid) renderSubcollections(col.id);
+
     if(collectionsView === "detail" && col){
       el.collectionsTopTitle.textContent = col.name;
       el.collectionsTopSub.textContent = "Movies in this collection.";
       el.collectionDetailView.style.display = "block";
       el.collectionNameTitle.textContent = col.name;
+      // Step 2: breadcrumbs + sub-collections
+      if(el.collectionCrumbs) renderCollectionBreadcrumbs(col.id);
+      if(el.subcollectionsGrid) renderSubcollections(col.id);
+      // Count hint will be finalized in renderCollectionDetail()
+
       // entering detail always starts in normal (non-reorder) mode
       collectionReorderMode = false;
       dragMovieId = "";
@@ -1516,6 +1683,9 @@ const App = (() => {
       const existing = currentCollectionId ? getCollection(currentCollectionId) : null;
       el.collectionNameInput.value = existing ? existing.name : "";
       tempCollectionArtwork = existing ? (existing.artwork||"") : "";
+      tempCollectionParentId = existing ? (existing.parentId||"") : (pendingNewCollectionParentId||"");
+      // pending parent is one-shot
+      pendingNewCollectionParentId = "";
       syncCollectionArtUI();
       // iOS: ensure name + buttons are reachable even with keyboard
       window.setTimeout(() => {
@@ -1665,7 +1835,11 @@ function getCollectionMoviesFilteredAndSorted(col){
     const result = getCollectionMoviesFilteredAndSorted(col);
     const movies = result.movies;
 
-    UI.el.collectionCountHint.textContent = movies.length + (movies.length===1 ? " movie" : " movies");
+    const subCount = getChildCollections(col.id).length;
+    const qNow = (UI.el.collectionQ && UI.el.collectionQ.value || "").trim();
+    const left = qNow ? (movies.length + (movies.length===1 ? " match" : " matches")) : (movies.length + (movies.length===1 ? " movie" : " movies"));
+    const right = subCount + (subCount===1 ? " folder" : " folders");
+    UI.el.collectionCountHint.textContent = left + " • " + right;
     const list = UI.el.collectionList;
     list.classList.toggle("reorderMode", collectionReorderMode);
     list.innerHTML = "";
@@ -2458,14 +2632,36 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
         if(UI.el.collectionSort) UI.el.collectionSort.disabled = false;
         if(UI.el.collectionQ) UI.el.collectionQ.disabled = false;
       }
-      if(collectionsView === "detail"){ collectionsView = "list"; currentCollectionId = ""; }
-      else if(collectionsView === "edit" || collectionsView === "pick"){ collectionsView = "detail"; }
-      else { collectionsView = "list"; currentCollectionId = ""; }
+      if(collectionsView === "detail"){
+        collectionsView = "list";
+        currentCollectionId = "";
+        collectionsReturnToId = "";
+        pendingNewCollectionParentId = "";
+      }
+      else if(collectionsView === "edit" || collectionsView === "pick"){
+        if(collectionsReturnToId){
+          collectionsView = "detail";
+          currentCollectionId = collectionsReturnToId;
+        }else{
+          collectionsView = "list";
+          currentCollectionId = "";
+        }
+        // keep return-to until user leaves detail
+      }
+      else {
+        collectionsView = "list";
+        currentCollectionId = "";
+        collectionsReturnToId = "";
+        pendingNewCollectionParentId = "";
+      }
       showCollectionsView();
     });
 
     if(UI.el.newCollectionBtn) UI.el.newCollectionBtn.addEventListener("click", () => {
+      // new top-level collection
       currentCollectionId = "";
+      collectionsReturnToId = "";
+      pendingNewCollectionParentId = "";
       collectionsView = "edit";
       showCollectionsView();
     });
@@ -2475,6 +2671,32 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       if(!card) return;
       currentCollectionId = card.dataset.id;
       collectionsView = "detail";
+      showCollectionsView();
+    });
+
+    // Step 2: click sub-collections inside a collection
+    if(UI.el.subcollectionsGrid) UI.el.subcollectionsGrid.addEventListener("click", (e)=>{
+      const card = e.target.closest(".collectionCard");
+      if(!card) return;
+      currentCollectionId = card.dataset.id;
+      collectionsView = "detail";
+      showCollectionsView();
+    });
+
+    // Step 2: breadcrumb navigation
+    if(UI.el.collectionCrumbs) UI.el.collectionCrumbs.addEventListener("click", (e)=>{
+      const btn = e.target.closest(".crumb");
+      if(!btn || btn.classList.contains("sep")) return;
+      const id = btn.dataset.id || "";
+      if(!id){
+        collectionsView = "list";
+        currentCollectionId = "";
+        collectionsReturnToId = "";
+        pendingNewCollectionParentId = "";
+      }else{
+        collectionsView = "detail";
+        currentCollectionId = id;
+      }
       showCollectionsView();
     });
 
@@ -2506,6 +2728,9 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
         if(!col){ UI.toast("Collection not found."); collectionsView="list"; showCollectionsView(); return; }
         col.name = name;
         col.artwork = tempCollectionArtwork || "";
+        // parentId is preserved unless this edit was created from "New Sub-Collection"
+        col.parentId = (tempCollectionParentId || "");
+        if(col.parentId === col.id) col.parentId = "";
         col.updatedAt = Date.now();
       }else{
         const id = uid();
@@ -2513,7 +2738,7 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
           id,
           name,
           artwork: tempCollectionArtwork || "",
-          parentId: null,
+          parentId: (tempCollectionParentId || ""),
           sortMode: "custom",
           customOrder: [],
           createdAt: Date.now(),
@@ -2536,7 +2761,9 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     if(UI.el.collectionDeleteBtn) UI.el.collectionDeleteBtn.addEventListener("click", () => {
       const col = getCollection(currentCollectionId);
       if(!col) { collectionsView = "list"; currentCollectionId = ""; showCollectionsView(); return; }
-      const ok = confirm(`Delete collection “${col.name}”? Movies will NOT be deleted.`);
+      const subCount = getChildCollections(col.id).length;
+    const extra = subCount ? " (and its sub-collections)" : "";
+    const ok = confirm(`Delete collection “${col.name}”${extra}? Movies will NOT be deleted.`);
       if(!ok) return;
 
       // unfile movies
@@ -2590,7 +2817,18 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       syncSaveEnabled();
     });
 
-    if(UI.el.collectionQ) UI.el.collectionQ.addEventListener("input", renderCollectionDetail);
+    // Step 2: create a sub-collection inside the current one
+    if(UI.el.collectionAddSubBtn) UI.el.collectionAddSubBtn.addEventListener("click", () => {
+      const parent = getCollection(currentCollectionId);
+      if(!parent) return;
+      currentCollectionId = "";
+      collectionsReturnToId = parent.id;
+      pendingNewCollectionParentId = parent.id;
+      collectionsView = "edit";
+      showCollectionsView();
+    });
+
+    collectionQ) UI.el.collectionQ.addEventListener("input", renderCollectionDetail);
     if(UI.el.collectionSort) UI.el.collectionSort.addEventListener("change", renderCollectionDetail);
     // Drag/drop ordering inside a collection (custom order)
     UI.el.collectionList.addEventListener("dragstart", (e) => {
@@ -2728,10 +2966,22 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     const ok = confirm(`Delete collection “${col.name}”? Movies will NOT be deleted.`);
     if(!ok) return;
 
-    for(const m of (state.movies||[])){
-      if((m.collectionId||"") === col.id) m.collectionId = "";
+    // Step 2: delete a collection *and* any nested sub-collections
+    const idsToDelete = new Set();
+    const stack = [col.id];
+    while(stack.length){
+      const id = stack.pop();
+      if(idsToDelete.has(id)) continue;
+      idsToDelete.add(id);
+      for(const c of (state.collections||[])){
+        if(String(c.parentId||"") === String(id)) stack.push(c.id);
+      }
     }
-    state.collections = (state.collections||[]).filter(c => c.id !== col.id);
+
+    for(const m of (state.movies||[])){
+      if(idsToDelete.has(String(m.collectionId||""))) m.collectionId = "";
+    }
+    state.collections = (state.collections||[]).filter(c => !idsToDelete.has(String(c.id)));
 
     try{ renderCollectionsGrid(); }catch(err){}
     try{ refreshCollectionSelectOptions(); }catch(err){}
