@@ -844,7 +844,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.0.1-experimental-addflow-return";
+const APP_VERSION = "v3.0.2-experimental-addflow-closefix";
 
   function applyAppVersion(){
     try{
@@ -1453,6 +1453,24 @@ const App = (() => {
   function closeCollections(){
     UI.el.collectionsModal.classList.remove("open");
   }
+
+  // v3 experimental: return to a specific collection detail after saving/canceling Add Movie
+  function openCollectionsDetail(collectionId){
+    collectionsView = "detail";
+    currentCollectionId = String(collectionId||"");
+    showCollectionsView();
+    UI.el.collectionsModal.classList.add("open");
+  }
+
+  function closeFormAndReturnIfNeededApp(){
+    UI.closeFormModal();
+    if(returnToCollectionId){
+      const target = returnToCollectionId;
+      returnToCollectionId = "";
+      openCollectionsDetail(target);
+    }
+  }
+
 
   function showCollectionsView(){
     const el = UI.el;
@@ -2140,14 +2158,14 @@ let editingId = null;
       // After updating, reset back to Add mode (less confusion, matches your workflow)
       resetForm();
       render();
-      closeFormAndReturnIfNeeded();
+      closeFormAndReturnIfNeededApp();
       UI.toast("Updated.");
     }else{
       state.movies.unshift(movie);
       if(nextCollectionId) setMovieCollection(movie.id, nextCollectionId, "");
       resetForm(); // auto-reset after adding
       render();
-      closeFormAndReturnIfNeeded();
+      closeFormAndReturnIfNeededApp();
       UI.toast("Added.");
     }
   }
@@ -2160,7 +2178,7 @@ let editingId = null;
     const out = deleteMovieById(m.id);
     resetForm();
     render();
-    closeFormAndReturnIfNeeded();
+    closeFormAndReturnIfNeededApp();
     if(out.deleted) offerUndo(out.deleted, out.index);
   }
 
@@ -2394,11 +2412,11 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     }
 
     if(UI.el.formCloseBtn){
-      UI.el.formCloseBtn.addEventListener("click", () => closeFormAndReturnIfNeeded());
+      UI.el.formCloseBtn.addEventListener("click", () => closeFormAndReturnIfNeededApp());
     }
     if(UI.el.formModal){
       UI.el.formModal.addEventListener("click", (e) => {
-        if(e.target === UI.el.formModal) closeFormAndReturnIfNeeded();
+        if(e.target === UI.el.formModal) closeFormAndReturnIfNeededApp();
       });
     }
 
