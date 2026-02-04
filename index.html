@@ -902,7 +902,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.1-collections-browser-hotfix";
+const APP_VERSION = "v3.1.2-collections-browser";
 
   function applyAppVersion(){
     try{
@@ -1716,7 +1716,11 @@ const App = (() => {
   function renderCollectionsGrid(){
     const grid = UI.el.collectionsGrid;
     grid.innerHTML = "";
-    const cols = (state.collections || []).slice().sort((a,b)=> (a.name||"").localeCompare(b.name||"", undefined, {sensitivity:"base"}));
+    // Step 2: List view shows ONLY top-level collections (parentId empty).
+    const cols = (state.collections || [])
+      .filter(c => !(c && c.parentId)) 
+      .slice()
+      .sort((a,b)=> (a.name||"").localeCompare(b.name||"", undefined, {sensitivity:"base"}));
     UI.el.collectionsEmpty.style.display = cols.length ? "none" : "block";
 
     for(const c of cols){
