@@ -902,7 +902,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.2-collections-browser";
+const APP_VERSION = "v3.1.3-collections-browser-subcollection-addfix";
 
   function applyAppVersion(){
     try{
@@ -1552,15 +1552,31 @@ const App = (() => {
   }
 
   function refreshCollectionSelectOptions(selectedId){
+    // In the Add/Edit Movie form, you must be able to target ANY collection
+    // (including sub-collections). We show hierarchy using indentation + full path.
     if(!UI.el.collectionSelect) return;
     const sel = UI.el.collectionSelect;
     const keep = (selectedId !== undefined) ? String(selectedId||"") : String(sel.value||"");
     sel.innerHTML = '<option value="">None</option>';
-    const cols = (state.collections || []).filter(c => !(c.parentId||"")).slice().sort((a,b)=> (a.name||"").localeCompare(b.name||"", undefined, {sensitivity:"base"}));
-    for(const c of cols){
+
+    const cols = (state.collections || []).slice();
+
+    function labelFor(c){
+      const path = getCollectionPath(c.id); // [{id,name}, ...]
+      const depth = Math.max(0, path.length - 1);
+      const indent = depth ? ("↳ ".repeat(depth)) : "";
+      const full = path.map(p => p.name).join(" / ");
+      return { depth, text: indent + full };
+    }
+
+    const labeled = cols.map(c => ({ c, l: labelFor(c) }));
+    labeled.sort((a,b)=> a.l.text.localeCompare(b.l.text, undefined, { sensitivity:"base" }));
+
+    for(const x of labeled){
+      const c = x.c;
       const opt = document.createElement("option");
       opt.value = c.id;
-      opt.textContent = c.name;
+      opt.textContent = x.l.text;
       sel.appendChild(opt);
     }
     sel.value = keep;
