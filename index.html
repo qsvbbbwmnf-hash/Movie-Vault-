@@ -902,7 +902,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.3-collections-browser-subcollection-addfix";
+const APP_VERSION = "v3.1.4-collections-browser-backfix";
 
   function applyAppVersion(){
     try{
@@ -2653,10 +2653,19 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
         if(UI.el.collectionQ) UI.el.collectionQ.disabled = false;
       }
       if(collectionsView === "detail"){
-        collectionsView = "list";
-        currentCollectionId = "";
-        collectionsReturnToId = "";
-        pendingNewCollectionParentId = "";
+        // If we're inside a sub-collection, Back should go to its parent collection.
+        const cur = getCollection(currentCollectionId);
+        const parentId = (cur && cur.parentId) ? String(cur.parentId) : "";
+        if(parentId){
+          collectionsView = "detail";
+          currentCollectionId = parentId;
+          // keep collectionsReturnToId / pendingNewCollectionParentId as-is
+        }else{
+          collectionsView = "list";
+          currentCollectionId = "";
+          collectionsReturnToId = "";
+          pendingNewCollectionParentId = "";
+        }
       }
       else if(collectionsView === "edit" || collectionsView === "pick"){
         if(collectionsReturnToId){
