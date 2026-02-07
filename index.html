@@ -902,7 +902,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.4-collections-browser-backfix";
+const APP_VERSION = "v3.1.5-collections-no-letter-cards";
 
   function applyAppVersion(){
     try{
@@ -1865,7 +1865,7 @@ function getCollectionMoviesFilteredAndSorted(col){
     list.innerHTML = "";
     UI.el.collectionEmpty.style.display = movies.length ? "none" : "block";
 
-    const showHeaders = (!collectionReorderMode) && !(UI.el.collectionQ && UI.el.collectionQ.value.trim());
+    const showHeaders = false;
     let prevL = null;
 
     for(const m of movies){
