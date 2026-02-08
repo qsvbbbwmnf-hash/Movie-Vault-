@@ -570,6 +570,11 @@
       outline: 2px dashed rgba(255,255,255,.35);
       outline-offset: 3px;
     }
+    .collectionsGrid .collectionCard.dragging{ opacity:.35; }
+    .collectionsGrid .collectionCard.dragOver{
+      outline: 2px dashed rgba(255,255,255,.35);
+      outline-offset: 3px;
+    }
 
 </style>
 </head>
@@ -802,6 +807,7 @@
               <div class="hint" id="collectionCountHint">—</div>
             </div>
             <button class="btn small ghost" id="collectionOrderBtn" type="button">Edit</button>
+            <button class="btn small ghost" id="folderOrderBtn" type="button">Edit Folders</button>
             <button class="btn small danger" id="collectionDeleteQuickBtn" type="button">Delete</button>
 </div>
 
@@ -902,7 +908,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.5-collections-no-letter-cards";
+const APP_VERSION = "v3.1.6-folder-reorder";
 
   function applyAppVersion(){
     try{
@@ -1098,6 +1104,7 @@ const Store = (() => {
         artwork: String(c && c.artwork || ""),
         sortMode: String(c && c.sortMode || "custom"),
         customOrder: Array.isArray(c && c.customOrder) ? c.customOrder.map(String) : [],
+        subOrder: Array.isArray(c && c.subOrder) ? c.subOrder.map(String) : [],
         createdAt: Number(c && c.createdAt || Date.now()),
         updatedAt: Number(c && c.updatedAt || Date.now()),
       })).filter(c => c.id && c.name);
@@ -1214,7 +1221,9 @@ const UI = (() => {
     collectionDetailView: document.getElementById("collectionDetailView"),
     collectionNameTitle: document.getElementById("collectionNameTitle"),
     collectionCountHint: document.getElementById("collectionCountHint"),
-    collectionOrderBtn: document.getElementById("collectionOrderBtn"),    collectionAddExistingBtn: document.getElementById("collectionAddExistingBtn"),
+    collectionOrderBtn: document.getElementById("collectionOrderBtn"),
+    folderOrderBtn: document.getElementById("folderOrderBtn"),
+    collectionAddExistingBtn: document.getElementById("collectionAddExistingBtn"),
     collectionAddNewBtn: document.getElementById("collectionAddNewBtn"),
     collectionQ: document.getElementById("collectionQ"),
     collectionSort: document.getElementById("collectionSort"),
@@ -1502,15 +1511,45 @@ const App = (() => {
     });
   }
 
+  
   function renderSubcollections(parentId){
     const grid = UI.el.subcollectionsGrid;
     const empty = UI.el.subcollectionsEmpty;
     if(!grid || !empty) return;
     grid.innerHTML = "";
 
-    const subs = getChildCollections(parentId).slice().sort((a,b)=>
-      (a.name||"").localeCompare(b.name||"", undefined, { sensitivity:"base" })
-    );
+    let subs = getChildCollections(parentId).slice();
+    const parent = getCollection(parentId);
+
+    // Keep parent.subOrder sane (like movie customOrder, but for folders)
+    if(parent){
+      if(!Array.isArray(parent.subOrder)) parent.subOrder = [];
+      const fullIds = subs.map(c => String(c.id));
+      let changed = false;
+
+      for(const id of fullIds){
+        if(!parent.subOrder.includes(id)){
+          parent.subOrder.push(id);
+          changed = true;
+        }
+      }
+      const pruned = parent.subOrder.filter(id => fullIds.includes(String(id)));
+      if(pruned.length !== parent.subOrder.length){
+        parent.subOrder = pruned;
+        changed = true;
+      }
+      if(changed) parent.updatedAt = Date.now();
+
+      const orderMap = new Map(parent.subOrder.map((id,i)=>[String(id), i]));
+      subs.sort((a,b)=>{
+        const ia = orderMap.has(String(a.id)) ? orderMap.get(String(a.id)) : 1e9;
+        const ib = orderMap.has(String(b.id)) ? orderMap.get(String(b.id)) : 1e9;
+        if(ia !== ib) return ia - ib;
+        return (a.name||"").localeCompare(b.name||"", undefined, { sensitivity:"base" });
+      });
+    }else{
+      subs.sort((a,b)=> (a.name||"").localeCompare(b.name||"", undefined, { sensitivity:"base" }));
+    }
 
     empty.style.display = subs.length ? "none" : "block";
 
@@ -1518,6 +1557,17 @@ const App = (() => {
       const card = document.createElement("div");
       card.className = "collectionCard";
       card.dataset.id = c.id;
+      card.draggable = !!folderReorderMode;
+
+      // In folder edit mode, show a drag handle (same glyph as movie ordering)
+      if(folderReorderMode){
+        const h = document.createElement("div");
+        h.className = "dragHandle";
+        h.title = "Drag to reorder folders";
+        h.setAttribute("aria-hidden","true");
+        h.textContent = "≡";
+        card.appendChild(h);
+      }
 
       let artNode;
       if(c.artwork){
@@ -1551,7 +1601,8 @@ const App = (() => {
     }
   }
 
-  function refreshCollectionSelectOptions(selectedId){
+
+function refreshCollectionSelectOptions(selectedId){
     // In the Add/Edit Movie form, you must be able to target ANY collection
     // (including sub-collections). We show hierarchy using indentation + full path.
     if(!UI.el.collectionSelect) return;
@@ -1617,6 +1668,8 @@ const App = (() => {
   let tempCollectionParentId = "";
   let collectionReorderMode = false;
   let dragMovieId = "";
+  let folderReorderMode = false;
+  let dragFolderId = "";
 
   function openCollections(){
     collectionsView = "list";
@@ -1683,7 +1736,10 @@ const App = (() => {
       // entering detail always starts in normal (non-reorder) mode
       collectionReorderMode = false;
       dragMovieId = "";
+      folderReorderMode = false;
+      dragFolderId = "";
       if(el.collectionOrderBtn) el.collectionOrderBtn.textContent = "Edit";
+      if(el.folderOrderBtn) el.folderOrderBtn.textContent = "Edit Folders";
       el.collectionQ.disabled = false;
       el.collectionSort.disabled = false;
       el.collectionQ.value = "";
@@ -1929,7 +1985,40 @@ function getCollectionMoviesFilteredAndSorted(col){
     UI.toast(collectionReorderMode ? "Edit mode: drag to reorder or tap Remove." : "Edits saved.");
   }
 
-  function renderCollectionPick(){
+  
+
+  function toggleFolderReorder(){
+    const col = getCollection(currentCollectionId);
+    if(!col) return;
+
+    // Only one edit mode at a time (movies OR folders)
+    if(collectionReorderMode){
+      collectionReorderMode = false;
+      dragMovieId = "";
+      if(UI.el.collectionOrderBtn) UI.el.collectionOrderBtn.textContent = "Edit";
+      UI.el.collectionQ.disabled = false;
+      UI.el.collectionSort.disabled = false;
+      try{ renderCollectionDetail(); }catch(_){}
+    }
+
+    folderReorderMode = !folderReorderMode;
+    dragFolderId = "";
+
+    if(UI.el.folderOrderBtn){
+      UI.el.folderOrderBtn.textContent = folderReorderMode ? "Done Folders" : "Edit Folders";
+    }
+
+    // Disable add buttons while reordering folders (prevents weird mid-drag state)
+    if(UI.el.collectionAddExistingBtn) UI.el.collectionAddExistingBtn.disabled = folderReorderMode;
+    if(UI.el.collectionAddNewBtn) UI.el.collectionAddNewBtn.disabled = folderReorderMode;
+    if(UI.el.collectionAddSubBtn) UI.el.collectionAddSubBtn.disabled = folderReorderMode;
+
+    // Re-render sub-folders to apply draggable + handle UI
+    renderSubcollections(col.id);
+    UI.toast(folderReorderMode ? "Folder edit mode: drag to reorder." : "Folder order saved.");
+  }
+
+function renderCollectionPick(){
   try{
     const col = getCollection(currentCollectionId);
     if(!col) return;
@@ -2698,6 +2787,7 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     if(UI.el.collectionsGrid) UI.el.collectionsGrid.addEventListener("click", (e)=>{
       const card = e.target.closest(".collectionCard");
       if(!card) return;
+      if(folderReorderMode) return;
       currentCollectionId = card.dataset.id;
       collectionsView = "detail";
       showCollectionsView();
@@ -2731,6 +2821,10 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
 
     if(UI.el.collectionOrderBtn) UI.el.collectionOrderBtn.addEventListener("click", () => {
       toggleCollectionReorder();
+    });
+
+    if(UI.el.folderOrderBtn) UI.el.folderOrderBtn.addEventListener("click", () => {
+      toggleFolderReorder();
     });
     // (v3.0.4) delete button uses delegated click handler (see below)
 
@@ -2859,6 +2953,82 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
 
     if(UI.el.collectionQ) UI.el.collectionQ.addEventListener("input", renderCollectionDetail);
     if(UI.el.collectionSort) UI.el.collectionSort.addEventListener("change", renderCollectionDetail);
+
+    // Drag/drop ordering for folders (sub-collections)
+    if(UI.el.subcollectionsGrid){
+      UI.el.subcollectionsGrid.addEventListener("dragstart", (e) => {
+        if(!folderReorderMode) return;
+        const card = e.target.closest(".collectionCard");
+        if(!card) return;
+        dragFolderId = card.dataset.id || "";
+        card.classList.add("dragging");
+        try{
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", dragFolderId);
+        }catch(err){}
+      });
+
+      UI.el.subcollectionsGrid.addEventListener("dragover", (e) => {
+        if(!folderReorderMode) return;
+        const card = e.target.closest(".collectionCard");
+        if(!card) return;
+        e.preventDefault();
+        try{ e.dataTransfer.dropEffect = "move"; }catch(err){}
+        // visual hint
+        for(const n of UI.el.subcollectionsGrid.querySelectorAll(".collectionCard.dragOver")) n.classList.remove("dragOver");
+        card.classList.add("dragOver");
+      });
+
+      UI.el.subcollectionsGrid.addEventListener("dragleave", (e) => {
+        if(!folderReorderMode) return;
+        const card = e.target.closest(".collectionCard");
+        if(card) card.classList.remove("dragOver");
+      });
+
+      UI.el.subcollectionsGrid.addEventListener("drop", (e) => {
+        if(!folderReorderMode) return;
+        e.preventDefault();
+        const targetCard = e.target.closest(".collectionCard");
+        if(!targetCard) return;
+
+        const dragged = dragFolderId || "";
+        const target = targetCard.dataset.id || "";
+        if(!dragged || !target || dragged === target) return;
+
+        const parent = getCollection(currentCollectionId);
+        if(!parent) return;
+
+        if(!Array.isArray(parent.subOrder)) parent.subOrder = [];
+        // ensure both exist in order
+        const childIds = getChildCollections(parent.id).map(c => String(c.id));
+        for(const id of childIds){
+          if(!parent.subOrder.includes(id)) parent.subOrder.push(id);
+        }
+        parent.subOrder = parent.subOrder.filter(id => childIds.includes(String(id)));
+
+        const from = parent.subOrder.indexOf(String(dragged));
+        const to = parent.subOrder.indexOf(String(target));
+        if(from === -1 || to === -1) return;
+
+        parent.subOrder.splice(from, 1);
+        const insertAt = (from < to) ? to - 1 : to;
+        parent.subOrder.splice(insertAt, 0, String(dragged));
+        parent.updatedAt = Date.now();
+
+        Store.save(state);
+        renderSubcollections(parent.id);
+        renderCollectionDetail(); // updates folder count line etc.
+      });
+
+      UI.el.subcollectionsGrid.addEventListener("dragend", (e) => {
+        if(!folderReorderMode) return;
+        for(const n of UI.el.subcollectionsGrid.querySelectorAll(".collectionCard.dragging")) n.classList.remove("dragging");
+        for(const n of UI.el.subcollectionsGrid.querySelectorAll(".collectionCard.dragOver")) n.classList.remove("dragOver");
+        dragFolderId = "";
+      });
+    }
+
+
     // Drag/drop ordering inside a collection (custom order)
     UI.el.collectionList.addEventListener("dragstart", (e) => {
       if(!collectionReorderMode) return;
