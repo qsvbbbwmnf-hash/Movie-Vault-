@@ -576,6 +576,21 @@
       outline-offset: 3px;
     }
 
+
+    /* Collections detail UX polish */
+    #collectionDetailView{ --crumbH: 0px; }
+    #collectionCrumbs{ z-index: 25; }
+    .subcolsTitle{
+      position: sticky;
+      top: calc(var(--crumbH) + 8px);
+      z-index: 20;
+      background: rgba(20,22,30,.92);
+      padding: 6px 0;
+      margin: 0 0 8px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
 </style>
 </head>
 <body>
@@ -908,7 +923,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.7-subcollection-assignment-lockdown";
+const APP_VERSION = "v3.1.8-collections-ux-polish";
 
   function applyAppVersion(){
     try{
@@ -1473,6 +1488,32 @@ const App = (() => {
     const pid = String(parentId||"");
     return (state.collections || []).filter(c => String(c.parentId||"") === pid);
   }
+  function getDescendantCollectionIds(rootId){
+    // Returns all descendant collection ids (not including root). Guards against loops.
+    const out = [];
+    const seen = new Set();
+    const stack = [String(rootId||"")];
+    while(stack.length){
+      const pid = stack.pop();
+      for(const c of (state.collections||[])){
+        if(String(c.parentId||"") === pid){
+          if(seen.has(c.id)) continue;
+          seen.add(c.id);
+          out.push(c.id);
+          stack.push(c.id);
+        }
+      }
+    }
+    return out;
+  }
+
+  function getDescendantMovieCount(rootId){
+    const ids = getDescendantCollectionIds(rootId);
+    if(!ids.length) return 0;
+    const set = new Set(ids.map(String));
+    return (state.movies||[]).filter(m => set.has(String(m.collectionId||""))).length;
+  }
+
 
   function getCollectionPath(collectionId){
     // Returns [{id,name}, ...] from root to current. Guards against loops.
@@ -1509,6 +1550,17 @@ const App = (() => {
         box.appendChild(sep);
       }
     });
+
+    // Measure crumbs height so the "Folders" header can sticky beneath it (iPad-friendly).
+    try{
+      const dv = document.getElementById("collectionDetailView");
+      if(dv){
+        requestAnimationFrame(() => {
+          const h = box.getBoundingClientRect().height || 0;
+          dv.style.setProperty("--crumbH", h + "px");
+        });
+      }
+    }catch(_){}
   }
 
   
@@ -1551,7 +1603,12 @@ const App = (() => {
       subs.sort((a,b)=> (a.name||"").localeCompare(b.name||"", undefined, { sensitivity:"base" }));
     }
 
-    empty.style.display = subs.length ? "none" : "block";
+    if(subs.length){
+      empty.style.display = "none";
+    }else{
+      empty.style.display = "block";
+      empty.textContent = "No sub-folders yet. Tap ‘New Sub-Collection’ to create one.";
+    }
 
     for(const c of subs){
       const card = document.createElement("div");
@@ -1672,6 +1729,10 @@ function refreshCollectionSelectOptions(selectedId){
   let dragFolderId = "";
 
   function openCollections(){
+    // Disable the Library A–Z bar while inside Collections (prevents iPad sticky weirdness).
+    azSuspended = true;
+    setAzBarHeightVar();
+    updateAZBar();
     collectionsView = "list";
     currentCollectionId = "";
     showCollectionsView();
@@ -1680,10 +1741,16 @@ function refreshCollectionSelectOptions(selectedId){
 
   function closeCollections(){
     UI.el.collectionsModal.classList.remove("open");
+    azSuspended = false;
+    setAzBarHeightVar();
+    updateAZBar();
   }
 
   // v3 experimental: return to a specific collection detail after saving/canceling Add Movie
   function openCollectionsDetail(collectionId){
+    azSuspended = true;
+    setAzBarHeightVar();
+    updateAZBar();
     collectionsView = "detail";
     currentCollectionId = String(collectionId||"");
     showCollectionsView();
@@ -1915,11 +1982,26 @@ function getCollectionMoviesFilteredAndSorted(col){
     const qNow = (UI.el.collectionQ && UI.el.collectionQ.value || "").trim();
     const left = qNow ? (movies.length + (movies.length===1 ? " match" : " matches")) : (movies.length + (movies.length===1 ? " movie" : " movies"));
     const right = subCount + (subCount===1 ? " folder" : " folders");
-    UI.el.collectionCountHint.textContent = left + " • " + right;
+    const descMovies = getDescendantMovieCount(col.id);
+    const tail = descMovies ? ` • ${descMovies} in sub-folders` : "";
+    UI.el.collectionCountHint.textContent = left + " • " + right + tail;
     const list = UI.el.collectionList;
     list.classList.toggle("reorderMode", collectionReorderMode);
     list.innerHTML = "";
-    UI.el.collectionEmpty.style.display = movies.length ? "none" : "block";
+    if(movies.length){
+      UI.el.collectionEmpty.style.display = "none";
+    }else{
+      const hasSubs = getChildCollections(col.id).length > 0;
+      const desc = getDescendantMovieCount(col.id);
+      UI.el.collectionEmpty.style.display = "block";
+      if(hasSubs && desc){
+        UI.el.collectionEmpty.textContent = "No movies directly in this folder. Your movies are in sub-folders above.";
+      }else if(hasSubs){
+        UI.el.collectionEmpty.textContent = "This folder has no movies yet. Add a movie here, or use the sub-folders above.";
+      }else{
+        UI.el.collectionEmpty.textContent = "This folder is empty. Add a movie, or create a sub-folder.";
+      }
+    }
 
     const showHeaders = false;
     let prevL = null;
@@ -2132,6 +2214,8 @@ function renderCollectionPick(){
 
 
   // Sticky A–Z jump bar support
+  let azSuspended = false;
+
   let lastRendered = [];
   let activeAZ = null;
   let lastAzSig = "";
@@ -2154,12 +2238,21 @@ function renderCollectionPick(){
   function setAzBarHeightVar(){
     // Used to offset sticky letter headers so they sit just beneath the sticky A–Z bar.
     if(!UI || !UI.el || !UI.el.azBar) return;
+    if(azSuspended){
+      document.documentElement.style.setProperty('--azBarH', '0px');
+      return;
+    }
     const h = UI.el.azBar.getBoundingClientRect().height || 0;
     document.documentElement.style.setProperty('--azBarH', h + 'px');
   }
 
   function updateAZBar(){
     if(!UI.el.azBar) return;
+    if(azSuspended){
+      UI.el.azBar.style.display = "none";
+      return;
+    }
+    UI.el.azBar.style.display = "flex";
     const enabled = new Set();
     for(const m of lastRendered){ const L = letterKeyFromTitle(m.title); if(L !== '#') enabled.add(L); }
 
