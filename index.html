@@ -908,7 +908,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.6-folder-reorder";
+const APP_VERSION = "v3.1.7-subcollection-assignment-lockdown";
 
   function applyAppVersion(){
     try{
@@ -2418,7 +2418,20 @@ let editingId = null;
     const existing = editingId ? getMovie(editingId) : null;
     const base = existing || Store.normalize({});
     const prevCollectionId = existing ? (existing.collectionId || "") : "";
-    const nextCollectionId = (UI.el.collectionSelect ? String(UI.el.collectionSelect.value||"") : "");
+
+// --- Critical stability: authoritative collection target ---
+// If the Add Movie flow was launched from within a collection detail view,
+// we treat returnToCollectionId as the source-of-truth target.
+// This prevents accidental "bounce" to parent or root when working in sub-collections.
+let nextCollectionId = (UI.el.collectionSelect ? String(UI.el.collectionSelect.value||"") : "");
+if(typeof returnToCollectionId !== "undefined" && returnToCollectionId){
+  nextCollectionId = String(returnToCollectionId||"");
+}
+// Guard: if the target collection id no longer exists, unfile it instead of misfiling.
+if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollectionId)){
+  nextCollectionId = "";
+}
+
     const movie = Store.normalize({
       ...base,
       id: editingId || base.id,
