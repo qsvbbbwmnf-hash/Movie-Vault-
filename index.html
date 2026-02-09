@@ -923,7 +923,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.8-collections-ux-polish";
+const APP_VERSION = "v3.1.9-true-collection-order";
 
   function applyAppVersion(){
     try{
@@ -1810,7 +1810,7 @@ function refreshCollectionSelectOptions(selectedId){
       el.collectionQ.disabled = false;
       el.collectionSort.disabled = false;
       el.collectionQ.value = "";
-      el.collectionSort.value = "custom";
+      el.collectionSort.value = (col && col.sortMode) ? col.sortMode : "custom";
       renderCollectionDetail();
       return;
     }
@@ -1948,19 +1948,36 @@ function getCollectionMoviesFilteredAndSorted(col){
     }
     if(changed) col.updatedAt = Date.now();
 
-    const sortMode = (UI.el.collectionSort.value||"custom");
+    const uiSort = (UI.el.collectionSort && UI.el.collectionSort.value) ? String(UI.el.collectionSort.value) : "";
+    // Persisted per-collection sort, but force "custom" while actively reordering.
+    let sortMode = collectionReorderMode ? "custom" : (uiSort || String(col.sortMode || "custom"));
+
+    // Fall back cleanly if custom order has nothing meaningful yet.
+    if(sortMode === "custom" && (!Array.isArray(col.customOrder) || col.customOrder.length === 0)){
+      sortMode = "title_asc";
+    }
+
     if(sortMode === "custom"){
-      const orderMap = new Map(col.customOrder.map((id, i) => [String(id), i]));
+      const orderMap = new Map((col.customOrder||[]).map((id, i) => [String(id), i]));
       movies.sort((a,b)=>{
         const ia = orderMap.has(String(a.id)) ? orderMap.get(String(a.id)) : 1e9;
         const ib = orderMap.has(String(b.id)) ? orderMap.get(String(b.id)) : 1e9;
         if(ia !== ib) return ia - ib;
         return titleSort(a,b,"asc");
       });
-    }else if(sortMode === "release"){
+    }else if(sortMode === "release_asc"){
       movies.sort((a,b)=> (releaseYear(a) - releaseYear(b)) || titleSort(a,b,"asc"));
-    }else{ // title
+    }else if(sortMode === "release_desc"){
+      movies.sort((a,b)=> (releaseYear(b) - releaseYear(a)) || titleSort(a,b,"asc"));
+    }else if(sortMode === "title_desc"){
+      movies.sort((a,b)=> titleSort(a,b,"desc"));
+    }else{ // title_asc (default)
       movies.sort((a,b)=> titleSort(a,b,"asc"));
+    }
+
+    // Remember chosen sort on the collection (unless we're mid-drag).
+    if(!collectionReorderMode){
+      col.sortMode = sortMode;
     }
 
     return { movies };
@@ -3058,7 +3075,17 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     });
 
     if(UI.el.collectionQ) UI.el.collectionQ.addEventListener("input", renderCollectionDetail);
-    if(UI.el.collectionSort) UI.el.collectionSort.addEventListener("change", renderCollectionDetail);
+    if(UI.el.collectionSort) UI.el.collectionSort.addEventListener("change", () => {
+      try{
+        const col = getCollection(currentCollectionId);
+        if(col){
+          col.sortMode = String(UI.el.collectionSort.value || "custom");
+          col.updatedAt = Date.now();
+          Store.save(state);
+        }
+      }catch(_){}
+      renderCollectionDetail();
+    });
 
     // Drag/drop ordering for folders (sub-collections)
     if(UI.el.subcollectionsGrid){
