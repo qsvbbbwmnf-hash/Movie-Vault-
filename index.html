@@ -923,7 +923,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.11-restore-persist-fix";
+const APP_VERSION = "v3.1.12-smart-hybrid-posters";
 
   function applyAppVersion(){
     try{
@@ -1098,6 +1098,7 @@ const Store = (() => {
       fullCast: (m && m.fullCast) ? String(m.fullCast).trim() : "",
       plot: (m && m.plot) ? String(m.plot).trim() : "",
       poster: (m && m.poster) ? String(m.poster) : "", // data URL (embedded)
+      posterRemote: (m && m.posterRemote) ? String(m.posterRemote) : "", // remote URL (TMDb/etc)
       collectionId: (m && m.collectionId !== undefined && m.collectionId !== null) ? String(m.collectionId) : "",
       createdAt: (m && m.createdAt) ? Number(m.createdAt) : now,
       updatedAt: (m && m.updatedAt) ? Number(m.updatedAt) : now,
@@ -1383,8 +1384,9 @@ const UI = (() => {
       const div = document.createElement("div");
       div.className = "item";
       div.dataset.id = m.id;
-      const thumb = m.poster
-        ? `<img class="thumb" alt="Poster" src="${esc(m.poster)}" />`
+      const posterSrc = (m.poster || m.posterRemote || "");
+      const thumb = posterSrc
+        ? `<img class="thumb" alt="Poster" src="${esc(posterSrc)}" />`
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
 
       const year = (m.release || "").trim().slice(0,4);
@@ -1449,8 +1451,9 @@ const UI = (() => {
     const prettyRelease = formatReleaseDate(m.release);
     el.mTitle.textContent = m.title || "(Untitled)";
     el.mSub.textContent = (prettyRelease && prettyRelease !== "—") ? `Release: ${prettyRelease}` : "—";
-    const poster = m.poster
-      ? `<img class="modalPoster" alt="Poster" src="${esc(m.poster)}" />`
+    const posterSrc = (m.poster || m.posterRemote || "");
+    const poster = posterSrc
+      ? `<img class="modalPoster" alt="Poster" src="${esc(posterSrc)}" />`
       : `<div class="modalPoster" style="display:grid; place-items:center; color:rgba(255,255,255,.55); font-size:12px;">No poster</div>`;
 
     el.mKv.innerHTML = `
@@ -2041,8 +2044,9 @@ function getCollectionMoviesFilteredAndSorted(col){
       div.dataset.id = m.id;
       div.draggable = !!collectionReorderMode;
 
-      const thumb = m.poster
-        ? `<img class="thumb" alt="Poster" src="${escH(m.poster)}" />`
+      const posterSrc = (m.poster || m.posterRemote || "");
+      const thumb = posterSrc
+        ? `<img class="thumb" alt="Poster" src="${escH(posterSrc)}" />`
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
 
       const year = (m.release || "").trim().slice(0,4);
@@ -2362,6 +2366,7 @@ function renderCollectionPick(){
 let editingId = null;
   let modalId = null;
   let currentPoster = "";
+  let currentPosterRemote = "";
   let currentFullCast = "";
 
   // v3 experimental: remember collection context when adding a new movie from inside a collection
@@ -2406,8 +2411,21 @@ let editingId = null;
 
   function getMovie(id){ return state.movies.find(x => x.id === id) || null; }
 
-  function setPoster(dataUrl){
-    currentPoster = dataUrl || "";
+  function setPoster(src){
+    const s = (src || "");
+    // Hybrid poster system:
+    // - If src is a data URL: store it as embedded poster, clear remote.
+    // - If src is http(s): treat it as remote poster URL, keep embedded empty.
+    if(/^https?:\/\//i.test(s)){
+      currentPoster = "";
+      currentPosterRemote = s;
+      UI.setPosterPreview(currentPosterRemote);
+      return;
+    }
+    currentPoster = s;
+    // If user supplies an embedded poster, we consider it authoritative.
+    // (Remote is still kept on the movie record if it existed, but current edit uses embedded.)
+    if(s) currentPosterRemote = "";
     UI.setPosterPreview(currentPoster);
   }
 
@@ -2489,7 +2507,32 @@ let editingId = null;
     return arr;
   }
 
-  function persist(){ Store.save(state); }
+  function persist(){
+    // Try to save normally; if iOS quota is hit (usually from embedded posters),
+    // fall back by stripping embedded base64 posters while keeping remote URLs.
+    let ok = Store.save(state);
+    if(ok) return;
+
+    const patched = {
+      movies: (state.movies||[]).map(m => {
+        const poster = String((m && m.poster) || "");
+        const posterRemote = String((m && m.posterRemote) || "");
+        const keepPoster = (/^data:image\//i.test(poster)) ? "" : poster;
+        return { ...m, poster: keepPoster, posterRemote };
+      }),
+      collections: (state.collections||[]).map(c => {
+        const art = String((c && c.artwork) || "");
+        const keepArt = (/^data:image\//i.test(art)) ? "" : art;
+        return { ...c, artwork: keepArt };
+      }),
+    };
+    for(const k of Object.keys(state||{})){
+      if(k !== "movies" && k !== "collections") patched[k] = state[k];
+    }
+    state = patched;
+    Store.save(state);
+    // Don't toast here (would spam); restore path already informs the user.
+  }
 
   function render(){
     const arr = getFilteredSorted();
@@ -2509,6 +2552,7 @@ let editingId = null;
       UI.el.collectionSelect.disabled = false;
       UI.el.collectionSelect.classList.remove('locked');
     }
+    currentPosterRemote = "";
     setPoster("");
     currentFullCast = "";
     UI.clearForm();
@@ -2553,6 +2597,7 @@ if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollect
       fullCast: (currentFullCast || (UI.el.cast ? UI.el.cast.value.trim() : "")),
       plot: (UI.el.plot ? UI.el.plot.value.trim() : ""),
       poster: currentPoster || "",
+      posterRemote: currentPosterRemote || "",
       updatedAt: Date.now(),
     });
 
@@ -2604,7 +2649,8 @@ if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollect
     UI.setEditMode(true);
     refreshCollectionSelectOptions(m.collectionId || "");
     UI.fillForm(m);
-    setPoster(m.poster || "");
+    currentPosterRemote = (m.posterRemote || "");
+    setPoster(m.poster || m.posterRemote || "");
     currentFullCast = (m.fullCast || m.cast || "");
     UI.closeModal();
     UI.openFormModal();
@@ -2776,15 +2822,20 @@ const crew = (tmdbCredits && tmdbCredits.crew) ? tmdbCredits.crew : [];
     if(UI.el.genre && Array.isArray(d.genres)) UI.el.genre.value = d.genres.map(g => g && g.name).filter(Boolean).join(", ");
     if(UI.el.plot) UI.el.plot.value = d.overview || UI.el.plot.value || "";
 
-    // Poster
+    // Poster (Hybrid)
     const posterUrl = d && d.poster_path ? Api.tmdbPosterUrl(d.poster_path) : "";
     if(posterUrl){
+      // Always remember the remote URL so we can fall back later (iOS storage quota).
+      currentPosterRemote = posterUrl;
       try{
         const dataUrl = await fetchImageToDataUrl(posterUrl);
         const small = await shrinkDataUrl(dataUrl);
+        // Prefer a small embedded thumbnail for offline use.
         setPoster(small);
+        // keep remote too
+        currentPosterRemote = posterUrl;
       }catch(_){
-        // If TMDb image CORS blocks dataURL conversion, fall back to using the direct URL.
+        // If TMDb image CORS blocks dataURL conversion, use the direct URL.
         setPoster(posterUrl);
       }
     }
@@ -3335,7 +3386,7 @@ document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeToolsM
       UI.el.posterBtn.addEventListener("click", () => UI.el.posterFile.click());
     }
     if(UI.el.posterRemoveBtn){
-      UI.el.posterRemoveBtn.addEventListener("click", () => setPoster(""));
+      UI.el.posterRemoveBtn.addEventListener("click", () => { currentPosterRemote = ""; setPoster(""); });
     }
     if(UI.el.posterFile){
       UI.el.posterFile.addEventListener("change", async () => {
@@ -3343,6 +3394,7 @@ document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeToolsM
         if(!f) return;
         try{
           const dataUrl = await shrinkImage(f);
+          currentPosterRemote = "";
           setPoster(dataUrl);
           UI.toast("Poster set.");
         }catch(err){
@@ -3459,8 +3511,19 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
         // Fallback: strip posters/artwork and save again so the restore can persist.
         if(!ok){
           const stripped = {
-            movies: (state.movies||[]).map(m => ({ ...m, poster: "" })),
-            collections: (state.collections||[]).map(c => ({ ...c, artwork: "" })),
+            movies: (state.movies||[]).map(m => {
+              const poster = String((m && m.poster) || "");
+              const posterRemote = String((m && m.posterRemote) || "");
+              // Keep remote URLs; only strip embedded base64 to fit iOS storage quota.
+              const keepPoster = (/^data:image\//i.test(poster)) ? "" : poster;
+              return { ...m, poster: keepPoster, posterRemote: posterRemote };
+            }),
+            collections: (state.collections||[]).map(c => {
+              const art = String((c && c.artwork) || "");
+              // Same rule for collection artwork.
+              const keepArt = (/^data:image\//i.test(art)) ? "" : art;
+              return { ...c, artwork: keepArt };
+            }),
           };
           // Preserve any other top-level fields if present
           for(const k of Object.keys(state||{})){
