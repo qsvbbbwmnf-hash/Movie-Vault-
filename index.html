@@ -923,7 +923,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.10-restore-activates";
+const APP_VERSION = "v3.1.11-restore-persist-fix";
 
   function applyAppVersion(){
     try{
@@ -3428,13 +3428,16 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
       const f = UI.el.importFile.files && UI.el.importFile.files[0];
       if(!f) return;
       try{
-        // Restore from Files should immediately become the ACTIVE vault.
-        // i.e., overwrite localStorage + in-memory state so refresh/tab reopen keeps it.
+        // Restore from Files should immediately become the ACTIVE vault:
+        // overwrite localStorage + in-memory state so refresh/tab reopen keeps it.
         state = await Store.importJSON(f);
 
         // Ensure collections structure exists + is normalized (older backups may omit it).
         if(!state || typeof state !== "object") state = { movies: [], collections: [] };
+        if(!Array.isArray(state.movies)) state.movies = [];
         if(!Array.isArray(state.collections)) state.collections = [];
+
+        // Normalize collections (including folder ordering fields)
         state.collections = state.collections.map(c => ({
           id: String(c && c.id || ""),
           parentId: String(c && c.parentId || ""),
@@ -3442,16 +3445,40 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
           artwork: String(c && c.artwork || ""),
           sortMode: String(c && c.sortMode || "custom"),
           customOrder: Array.isArray(c && c.customOrder) ? c.customOrder.map(String) : [],
-          // Folder ordering (sub-collections)
           childOrder: Array.isArray(c && c.childOrder) ? c.childOrder.map(String) : [],
           createdAt: Number(c && c.createdAt || Date.now()),
           updatedAt: Number(c && c.updatedAt || Date.now()),
         })).filter(c => c.id && c.name);
 
-        const ok = Store.save(state);
+        // First attempt: save as-is.
+        let ok = Store.save(state);
+
+        // IMPORTANT iOS reality check:
+        // If you have lots of embedded posters (base64), localStorage can hit quota.
+        // In that case the restore looks fine... until refresh, when it snaps back.
+        // Fallback: strip posters/artwork and save again so the restore can persist.
+        if(!ok){
+          const stripped = {
+            movies: (state.movies||[]).map(m => ({ ...m, poster: "" })),
+            collections: (state.collections||[]).map(c => ({ ...c, artwork: "" })),
+          };
+          // Preserve any other top-level fields if present
+          for(const k of Object.keys(state||{})){
+            if(k !== "movies" && k !== "collections") stripped[k] = state[k];
+          }
+          state = stripped;
+          ok = Store.save(state);
+          if(ok){
+            UI.toast("Restored & activated (posters removed to fit storage).");
+          }else{
+            UI.toast("Restored, but could not save (storage full).");
+          }
+        }else{
+          UI.toast("Restored & activated.");
+        }
+
         resetForm();
         render();
-        UI.toast(ok ? "Restored & activated." : "Restored (could not save)." );
       }catch(err){
         UI.toast(String(err.message || err));
       }finally{
