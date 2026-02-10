@@ -923,7 +923,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.12-smart-hybrid-posters";
+const APP_VERSION = "v3.1.13-smart-hybrid-posters-fix";
 
   function applyAppVersion(){
     try{
@@ -2205,7 +2205,7 @@ function renderCollectionPick(){
     UI.el.collectionArtRemoveBtn.style.display = has ? "inline-flex" : "none";
   }
 
-  async function fileToDataUrlScaled(file, max=420){
+  async function fileToDataUrlScaled(file, max=360, quality=0.72){
     const dataUrl = await new Promise((res, rej) => {
       const fr = new FileReader();
       fr.onload = () => res(String(fr.result||""));
@@ -2222,14 +2222,14 @@ function renderCollectionPick(){
     const w = img.width || 0, h = img.height || 0;
     if(!w || !h) return dataUrl;
     const scale = Math.min(1, max / Math.max(w,h));
-    if(scale >= 1) return dataUrl;
     const cw = Math.max(1, Math.round(w*scale));
     const ch = Math.max(1, Math.round(h*scale));
     const c = document.createElement("canvas");
     c.width = cw; c.height = ch;
     const ctx = c.getContext("2d");
     ctx.drawImage(img, 0, 0, cw, ch);
-    return c.toDataURL("image/jpeg", 0.86);
+    // Always re-encode as JPEG even when no scaling is needed (PNG can be huge).
+    return c.toDataURL("image/jpeg", quality);
   }
 
 
@@ -2513,7 +2513,35 @@ let editingId = null;
     let ok = Store.save(state);
     if(ok) return;
 
+    // Progressive fallback: first strip only LARGE embedded images.
+    // (Keeps small thumbnails and small collection art when possible.)
+    const MAX_POSTER_CHARS = 45000;   // ~33KB base64 payload-ish
+    const MAX_ART_CHARS    = 38000;   // ~28KB base64 payload-ish
+
     const patched = {
+      movies: (state.movies||[]).map(m => {
+        const poster = String((m && m.poster) || "");
+        const posterRemote = String((m && m.posterRemote) || "");
+        let keepPoster = poster;
+        if(/^data:image\//i.test(poster) && poster.length > MAX_POSTER_CHARS) keepPoster = "";
+        return { ...m, poster: keepPoster, posterRemote };
+      }),
+      collections: (state.collections||[]).map(c => {
+        const art = String((c && c.artwork) || "");
+        let keepArt = art;
+        if(/^data:image\//i.test(art) && art.length > MAX_ART_CHARS) keepArt = "";
+        return { ...c, artwork: keepArt };
+      }),
+    };
+    for(const k of Object.keys(state||{})){
+      if(k !== "movies" && k !== "collections") patched[k] = state[k];
+    }
+    state = patched;
+    ok = Store.save(state);
+    if(ok) return;
+
+    // Final fallback: if even that fails, strip ALL embedded images.
+    const hard = {
       movies: (state.movies||[]).map(m => {
         const poster = String((m && m.poster) || "");
         const posterRemote = String((m && m.posterRemote) || "");
@@ -2527,9 +2555,9 @@ let editingId = null;
       }),
     };
     for(const k of Object.keys(state||{})){
-      if(k !== "movies" && k !== "collections") patched[k] = state[k];
+      if(k !== "movies" && k !== "collections") hard[k] = state[k];
     }
-    state = patched;
+    state = hard;
     Store.save(state);
     // Don't toast here (would spam); restore path already informs the user.
   }
@@ -2683,7 +2711,8 @@ if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollect
 
   async function shrinkDataUrl(dataUrl){
     const img = await loadImage(dataUrl);
-    const maxW = 420, maxH = 630;
+    // Keep embedded posters truly thumbnail-sized so they survive iPad Safari storage.
+    const maxW = 320, maxH = 480;
     const w = img.naturalWidth || img.width || 1;
     const h = img.naturalHeight || img.height || 1;
     const scale = Math.min(1, maxW / w, maxH / h);
@@ -2693,7 +2722,7 @@ if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollect
     canvas.width = nw; canvas.height = nh;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0, nw, nh);
-    return canvas.toDataURL("image/jpeg", 0.82);
+    return canvas.toDataURL("image/jpeg", 0.70);
   }
 
   async function autoFill(){
@@ -3085,7 +3114,8 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       const f = e.target.files && e.target.files[0];
       if(!f) return;
       try{
-        tempCollectionArtwork = await fileToDataUrlScaled(f, 420);
+        // Collection artwork should be small enough to survive iPad Safari storage.
+        tempCollectionArtwork = await fileToDataUrlScaled(f, 300, 0.70);
         syncCollectionArtUI();
       }catch(_){ UI.toast("Could not read image."); }
       UI.el.collectionArtFile.value = "";
@@ -3510,18 +3540,22 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
         // In that case the restore looks fine... until refresh, when it snaps back.
         // Fallback: strip posters/artwork and save again so the restore can persist.
         if(!ok){
+          // Progressive fallback: keep small embedded thumbs/art where possible.
+          const MAX_POSTER_CHARS = 45000;
+          const MAX_ART_CHARS    = 38000;
+
           const stripped = {
             movies: (state.movies||[]).map(m => {
               const poster = String((m && m.poster) || "");
               const posterRemote = String((m && m.posterRemote) || "");
-              // Keep remote URLs; only strip embedded base64 to fit iOS storage quota.
-              const keepPoster = (/^data:image\//i.test(poster)) ? "" : poster;
-              return { ...m, poster: keepPoster, posterRemote: posterRemote };
+              let keepPoster = poster;
+              if(/^data:image\//i.test(poster) && poster.length > MAX_POSTER_CHARS) keepPoster = "";
+              return { ...m, poster: keepPoster, posterRemote };
             }),
             collections: (state.collections||[]).map(c => {
               const art = String((c && c.artwork) || "");
-              // Same rule for collection artwork.
-              const keepArt = (/^data:image\//i.test(art)) ? "" : art;
+              let keepArt = art;
+              if(/^data:image\//i.test(art) && art.length > MAX_ART_CHARS) keepArt = "";
               return { ...c, artwork: keepArt };
             }),
           };
@@ -3531,8 +3565,31 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
           }
           state = stripped;
           ok = Store.save(state);
+
+          // If we still can't save, strip ALL embedded images.
+          if(!ok){
+            const hard = {
+              movies: (state.movies||[]).map(m => {
+                const poster = String((m && m.poster) || "");
+                const posterRemote = String((m && m.posterRemote) || "");
+                const keepPoster = (/^data:image\//i.test(poster)) ? "" : poster;
+                return { ...m, poster: keepPoster, posterRemote };
+              }),
+              collections: (state.collections||[]).map(c => {
+                const art = String((c && c.artwork) || "");
+                const keepArt = (/^data:image\//i.test(art)) ? "" : art;
+                return { ...c, artwork: keepArt };
+              }),
+            };
+            for(const k of Object.keys(state||{})){
+              if(k !== "movies" && k !== "collections") hard[k] = state[k];
+            }
+            state = hard;
+            ok = Store.save(state);
+          }
+
           if(ok){
-            UI.toast("Restored & activated (posters removed to fit storage).");
+            UI.toast("Restored & activated.");
           }else{
             UI.toast("Restored, but could not save (storage full).");
           }
