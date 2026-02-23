@@ -395,6 +395,29 @@
       filter:saturate(.9);
     }
 
+    /* Save button docking (Add/Edit modal) */
+    .posterSaveWrap{
+      display:grid;
+      gap:12px;
+      align-items:start;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 560px){
+      .posterSaveWrap{
+        grid-template-columns: 1fr 260px;
+      }
+    }
+    .saveBlock{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      align-self:start;
+    }
+    .saveBlock .btn{
+      width:100%;
+      justify-content:center;
+    }
+
     .vsep{
       width:1px;
       height:28px;
@@ -700,22 +723,24 @@
           <label for="plot">Plot</label>
           <textarea id="plot" placeholder="Short plot synopsis…" autocomplete="off"></textarea>
         </div>
-<div>
-          <label>Poster (optional)</label>
-          <div class="row" style="gap:12px; align-items:center; flex-wrap:wrap;">
-            <button class="btn small ghost" id="posterBtn" type="button">Choose Poster…</button>
-            <button class="btn small danger" id="posterRemoveBtn" type="button" style="display:none;">Remove</button>
-            <input id="posterFile" class="fileOffscreen" type="file" accept="image/*" />
-            <div class="hint" style="flex:1; min-width:220px;">Tip: JPG/PNG. Stored inside your vault (offline). Large images are auto-shrunk.</div>
+        <div class="posterSaveWrap">
+          <div>
+            <label>Poster (optional)</label>
+            <div class="row" style="gap:12px; align-items:center; flex-wrap:wrap;">
+              <button class="btn small ghost" id="posterBtn" type="button">Choose Poster…</button>
+              <button class="btn small danger" id="posterRemoveBtn" type="button" style="display:none;">Remove</button>
+              <input id="posterFile" class="fileOffscreen" type="file" accept="image/*" />
+              <div class="hint" style="flex:1; min-width:220px;">Tip: JPG/PNG. Stored inside your vault (offline). Large images are auto-shrunk.</div>
+            </div>
+            <div style="margin-top:10px;">
+              <img id="posterPreview" class="posterPreview" alt="Poster preview" />
+            </div>
           </div>
-          <div style="margin-top:10px;">
-            <img id="posterPreview" class="posterPreview" alt="Poster preview" />
-          </div>
-        </div>
 
-        <div class="row">
-          <button class="btn primary grow" id="saveBtn" type="button">Save Movie</button>
-          <button class="btn danger" id="deleteBtn" type="button" style="display:none;">Delete</button>
+          <div class="saveBlock">
+            <button class="btn primary" id="saveBtn" type="button">Save Movie</button>
+            <button class="btn danger" id="deleteBtn" type="button" style="display:none;">Delete</button>
+          </div>
         </div>
         <div class="hint">Tip: Backups always use the same filename. Saving to the same folder will prompt you to replace the old file.</div>
       </div>
@@ -923,7 +948,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.13-smart-hybrid-posters-fix";
+const APP_VERSION = "v3.1.14-save-button-dock";
 
   function applyAppVersion(){
     try{
