@@ -982,7 +982,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.15-wishlist";
+const APP_VERSION = "v3.1.16-wishlist-fix";
 
   function applyAppVersion(){
     try{
@@ -2617,7 +2617,9 @@ let editingId = null;
       case "release_desc": arr.sort((a,b)=>byRelease(b,a)); break;
       default: arr.sort(byTitle);
     }
-    
+    return arr;
+  }
+
   function getWishFilteredSorted(){
     const q = (UI.el.wishQ ? UI.el.wishQ.value.trim().toLowerCase() : "");
     const sort = (UI.el.wishSort ? UI.el.wishSort.value : "title_asc");
@@ -2651,9 +2653,6 @@ let editingId = null;
       default: arr.sort(byTitle);
     }
     return arr;
-  }
-
-return arr;
   }
 
   function persist(){
