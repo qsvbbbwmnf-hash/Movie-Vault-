@@ -639,6 +639,7 @@
         </div>
         <div class="pill" id="versionPill" style="opacity:.9;"></div>
         <div class="pill" id="countPill">0 movies</div>
+        <div class="pill" id="wishCountPill">0 wishes</div>
       </div>
     </header>
 
@@ -667,6 +668,31 @@
           </div>
         </div>
       </section>
+
+      <!-- Wish List -->
+      <section class="card">
+        <div class="hd">
+          <h2>Wish List</h2>
+          <div class="row">
+            <input id="wishQ" placeholder="Search wish list…" style="max-width:260px;" />
+            <select id="wishSort" class="btn small" style="padding:9px 10px;">
+              <option value="added_desc">Newest</option>
+              <option value="added_asc">Oldest</option>
+              <option value="title_asc" selected>Title A→Z</option>
+              <option value="title_desc">Title Z→A</option>
+              <option value="release_desc">Release ↓</option>
+              <option value="release_asc">Release ↑</option>
+            </select>
+          </div>
+        </div>
+        <div class="bd">
+          <div id="wishList" class="list"></div>
+          <div id="wishEmpty" class="hint" style="display:none; padding:10px 2px;">
+            No wish list movies yet. Mark a movie as “Wish List” when adding/editing.
+          </div>
+        </div>
+      </section>
+
     </div>
   </div>
 
@@ -710,6 +736,14 @@
           </select>
           <div class="hint">Tip: Collections are folders (Rocky, Alien, etc.). You can manage them in the Collections screen.</div>
         </div>
+        <div class="row" style="gap:10px; align-items:center;">
+          <label style="display:flex; gap:10px; align-items:center; margin:0; font-weight:900; color:rgba(255,255,255,.85);">
+            <input id="wish" type="checkbox" style="width:auto; transform: scale(1.15);" />
+            Wish List
+          </label>
+          <div class="hint" style="margin:0;">Use this for movies you want to watch/buy later (not owned yet).</div>
+        </div>
+
 
 <div>
           <label for="cast">Cast (optional)</label>
@@ -948,7 +982,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.14-save-button-dock";
+const APP_VERSION = "v3.1.15-wishlist";
 
   function applyAppVersion(){
     try{
@@ -1125,6 +1159,7 @@ const Store = (() => {
       poster: (m && m.poster) ? String(m.poster) : "", // data URL (embedded)
       posterRemote: (m && m.posterRemote) ? String(m.posterRemote) : "", // remote URL (TMDb/etc)
       collectionId: (m && m.collectionId !== undefined && m.collectionId !== null) ? String(m.collectionId) : "",
+      wish: !!(m && m.wish),
       createdAt: (m && m.createdAt) ? Number(m.createdAt) : now,
       updatedAt: (m && m.updatedAt) ? Number(m.updatedAt) : now,
     };
@@ -1220,6 +1255,12 @@ const UI = (() => {
     empty: document.getElementById("empty"),
     versionPill: document.getElementById("versionPill"),
     countPill: document.getElementById("countPill"),
+    wishCountPill: document.getElementById("wishCountPill"),
+    wish: document.getElementById("wish"),
+    wishQ: document.getElementById("wishQ"),
+    wishSort: document.getElementById("wishSort"),
+    wishList: document.getElementById("wishList"),
+    wishEmpty: document.getElementById("wishEmpty"),
     // add/edit modal
     addMovieBtn: document.getElementById("addMovieBtn"),
     collectionsBtn: document.getElementById("collectionsBtn"),
@@ -1337,6 +1378,8 @@ const UI = (() => {
 
   function setCount(n){ el.countPill.textContent = (n===1) ? "1 movie" : `${n} movies`; }
 
+  function setWishCount(n){ if(el.wishCountPill) el.wishCountPill.textContent = (n===1) ? "1 wish" : `${n} wishes`; }
+
   function setEditMode(on){
     el.formTitle.textContent = on ? "Edit Movie" : "Add Movie";
     el.saveBtn.textContent = on ? "Update Movie" : "Save Movie";
@@ -1353,6 +1396,7 @@ const UI = (() => {
     }
     if(el.cast) el.cast.value = m.cast || "";
     if(el.plot) el.plot.value = m.plot || "";
+    if(el.wish) el.wish.checked = !!m.wish;
   }
   function clearForm(){
     el.title.value = "";
@@ -1361,6 +1405,7 @@ const UI = (() => {
     if(el.collectionSelect) el.collectionSelect.value = "";
     if(el.cast) el.cast.value = "";
     if(el.plot) el.plot.value = "";
+    if(el.wish) el.wish.checked = false;
     if(el.posterPreview){
       el.posterPreview.src = "";
       el.posterPreview.style.display = "none";
@@ -1431,7 +1476,50 @@ const UI = (() => {
 
 
 
-  function renderAZBar(enabledSet, activeLetter){
+  
+  function renderWishList(movies){
+    if(!el.wishList || !el.wishEmpty) return;
+    const list = el.wishList;
+    list.innerHTML = "";
+    el.wishEmpty.style.display = movies.length ? "none" : "block";
+
+    let prevL = null;
+    for(const m of movies){
+      const L = (typeof letterKeyFromTitle === "function") ? letterKeyFromTitle(m.title) : "#";
+      if(L !== prevL && L !== '#'){
+        const h = document.createElement("div");
+        h.className = "azHeader";
+        h.dataset.letter = L;
+        h.textContent = L;
+        list.appendChild(h);
+        prevL = L;
+      }
+
+      const div = document.createElement("div");
+      div.className = "item";
+      div.dataset.id = m.id;
+
+      const posterSrc = (m.poster || m.posterRemote || "");
+      const thumb = posterSrc
+        ? `<img class="thumb" alt="Poster" src="${esc(posterSrc)}" />`
+        : `<div class="thumb ph">NO<br/>POSTER</div>`;
+
+      const year = (m.release || "").trim().slice(0,4);
+      const yearSafe = (/^[0-9]{4}$/.test(year) ? year : "—");
+
+      div.innerHTML = `
+        ${thumb}
+        <div>
+          <div class="title">${esc(m.title || "(Untitled)")}</div>
+          <div class="meta"><b>${esc(yearSafe)}</b></div>
+          <div class="chipRow"><span class="chip"><span class="k">LIST</span>WISH</span></div>
+        </div>
+      `;
+      list.appendChild(div);
+    }
+  }
+
+function renderAZBar(enabledSet, activeLetter){
     if(!el.azBar) return;
     const letters = [];
     for(let i=65;i<=90;i++) letters.push(String.fromCharCode(i));
@@ -1502,7 +1590,7 @@ const UI = (() => {
     if(el.versionPill) el.versionPill.textContent = v || "";
   }
 
-  return { el, toast, toastAction, setVersion, setCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, renderAZBar, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openModal, closeModal };
+  return { el, toast, toastAction, setVersion, setCount, setWishCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, renderWishList, renderAZBar, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openModal, closeModal };
 })();
 
 /* 4) App */
@@ -2499,7 +2587,7 @@ let editingId = null;
   function getFilteredSorted(){
     const q = UI.el.q.value.trim().toLowerCase();
     const sort = UI.el.sort.value;
-    let arr = [...state.movies];
+    let arr = (Array.isArray(state.movies)?state.movies:[]).filter(m => !m.wish);
 
     if(q){
       arr = arr.filter(m =>
@@ -2529,7 +2617,43 @@ let editingId = null;
       case "release_desc": arr.sort((a,b)=>byRelease(b,a)); break;
       default: arr.sort(byTitle);
     }
+    
+  function getWishFilteredSorted(){
+    const q = (UI.el.wishQ ? UI.el.wishQ.value.trim().toLowerCase() : "");
+    const sort = (UI.el.wishSort ? UI.el.wishSort.value : "title_asc");
+    let arr = (Array.isArray(state.movies)?state.movies:[]).filter(m => !!m.wish);
+
+    if(q){
+      arr = arr.filter(m =>
+        (m.title||"").toLowerCase().includes(q) ||
+        (m.director||"").toLowerCase().includes(q) ||
+        (m.cast||"").toLowerCase().includes(q) ||
+        (m.release||"").toLowerCase().includes(q) ||
+        (m.plot||"").toLowerCase().includes(q)
+      );
+    }
+
+    const titleSortKey = (t) => {
+      const s = String(t || '').trim();
+      return s.replace(/^(the|a|an)\s+/i, '').trim();
+    };
+
+    const byTitle = (a,b) => titleSortKey(a.title).localeCompare(titleSortKey(b.title), undefined, { sensitivity:"base" });
+    const byRelease = (a,b) => (a.release||"").localeCompare(b.release||"");
+    const byAdded = (a,b) => (a.createdAt||0) - (b.createdAt||0);
+
+    switch(sort){
+      case "added_asc": arr.sort(byAdded); break;
+      case "added_desc": arr.sort((a,b)=>byAdded(b,a)); break;
+      case "title_desc": arr.sort((a,b)=>byTitle(b,a)); break;
+      case "release_asc": arr.sort(byRelease); break;
+      case "release_desc": arr.sort((a,b)=>byRelease(b,a)); break;
+      default: arr.sort(byTitle);
+    }
     return arr;
+  }
+
+return arr;
   }
 
   function persist(){
@@ -2595,6 +2719,11 @@ let editingId = null;
     setAzBarHeightVar();
     scheduleScrollSpy();
     UI.setCount(arr.length);
+
+    const wishArr = getWishFilteredSorted();
+    if(UI.renderWishList) UI.renderWishList(wishArr);
+    if(UI.setWishCount) UI.setWishCount(wishArr.length);
+
     persist();
   }
 
@@ -2651,6 +2780,7 @@ if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollect
       plot: (UI.el.plot ? UI.el.plot.value.trim() : ""),
       poster: currentPoster || "",
       posterRemote: currentPosterRemote || "",
+      wish: (UI.el.wish ? !!UI.el.wish.checked : false),
       updatedAt: Date.now(),
     });
 
@@ -3368,6 +3498,14 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       openModal(card.dataset.id);
     });
 
+    if(UI.el.wishList){
+      UI.el.wishList.addEventListener("click", (e) => {
+        const card = e.target.closest(".item");
+        if(!card) return;
+        openModal(card.dataset.id);
+      });
+    }
+
     if(UI.el.deleteBtn) UI.el.deleteBtn.addEventListener("click", deleteMovie);
 
     // Tools dropdown (Backup / Restore)
@@ -3463,6 +3601,9 @@ document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeToolsM
 
     UI.el.q.addEventListener("input", render);
     UI.el.sort.addEventListener("change", render);
+
+    if(UI.el.wishQ) UI.el.wishQ.addEventListener("input", render);
+    if(UI.el.wishSort) UI.el.wishSort.addEventListener("change", render);
 
     if(UI.el.azBar){
       UI.el.azBar.addEventListener("click", (e) => {
