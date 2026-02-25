@@ -791,6 +791,7 @@
         </div>
         <div class="row">
           <button class="btn small danger" id="modalDeleteBtn" type="button">Delete</button>
+          <button class="btn small ghost" id="wishToggleBtn" type="button">Move to Wish List</button>
           <button class="btn small ghost" id="editBtn" type="button">Edit</button>
           <button class="btn small ghost" id="closeBtn" type="button">Close</button>
         </div>
@@ -982,7 +983,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.16-wishlist-fix";
+const APP_VERSION = "v3.1.17-wishlist-toggle-in-modal";
 
   function applyAppVersion(){
     try{
@@ -1338,6 +1339,7 @@ const UI = (() => {
     mKv: document.getElementById("mKv"),
     closeBtn: document.getElementById("closeBtn"),
     editBtn: document.getElementById("editBtn"),
+    wishToggleBtn: document.getElementById("wishToggleBtn"),
     modalDeleteBtn: document.getElementById("modalDeleteBtn"),
   };
 
@@ -1564,6 +1566,11 @@ function renderAZBar(enabledSet, activeLetter){
     const prettyRelease = formatReleaseDate(m.release);
     el.mTitle.textContent = m.title || "(Untitled)";
     el.mSub.textContent = (prettyRelease && prettyRelease !== "—") ? `Release: ${prettyRelease}` : "—";
+
+    // Wish List toggle label (lives in the modal action bar)
+    if(el.wishToggleBtn){
+      el.wishToggleBtn.textContent = m && m.wish ? "Remove from Wish List" : "Move to Wish List";
+    }
     const posterSrc = (m.poster || m.posterRemote || "");
     const poster = posterSrc
       ? `<img class="modalPoster" alt="Poster" src="${esc(posterSrc)}" />`
@@ -2841,6 +2848,20 @@ if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollect
     UI.toast("Loaded into editor.");
   }
 
+  function toggleWishFromModal(){
+    if(!modalId) return;
+    const m = getMovie(modalId);
+    if(!m) return;
+    m.wish = !m.wish;
+    m.updatedAt = Date.now();
+    persist();
+    render();
+
+    // Refresh the modal UI (title/details stay the same; button label + any wish-only UI updates)
+    UI.openModal(m);
+    UI.toast(m.wish ? "Moved to Wish List." : "Removed from Wish List.");
+  }
+
 
   function openKeys(){
     apiKeys = Api.loadKeys();
@@ -3638,6 +3659,12 @@ document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeToolsM
       }
     });
     UI.el.editBtn.addEventListener("click", editFromModal);
+    if(UI.el.wishToggleBtn){
+      UI.el.wishToggleBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleWishFromModal();
+      });
+    }
 UI.el.modalDeleteBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       if(!modalId) return;
