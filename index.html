@@ -647,6 +647,7 @@
           <input id="importFile" class="fileOffscreen" type="file" accept="application/json" />
         </div>
         <div class="pill" id="versionPill" style="opacity:.9;"></div>
+        <button class="pill pillBtn" id="randomPickPill" type="button" aria-label="Pick a random movie">🎲 Random</button>
         <button class="pill pillBtn" id="countPill" type="button" aria-label="Jump to Library">0 movies</button>
         <button class="pill pillBtn" id="wishCountPill" type="button" aria-label="Jump to Wish List">0 wishes</button>
       </div>
@@ -998,7 +999,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.17-wishlist-toggle-in-modal";
+const APP_VERSION = "v3.1.18-wishlist-page-random-pick";
 
   function applyAppVersion(){
     try{
@@ -2841,6 +2842,45 @@ if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollect
     if(out.deleted) offerUndo(out.deleted, out.index);
   }
 
+  // Random picker (stores last pick so "random" feels random)
+  const RANDOM_PICK_KEY = "movie_vault_random_pick_last_v1";
+  let lastRandomPickId = "";
+  try{ lastRandomPickId = String(localStorage.getItem(RANDOM_PICK_KEY) || ""); }catch(_){ lastRandomPickId = ""; }
+
+  function saveLastRandomPick(id){
+    lastRandomPickId = String(id||"");
+    try{ localStorage.setItem(RANDOM_PICK_KEY, lastRandomPickId); }catch(_){ }
+  }
+
+  function pickRandomFrom(list){
+    const arr = Array.isArray(list) ? list : [];
+    if(!arr.length){ UI.toast("No movies to pick from."); return; }
+
+    // Try to avoid repeating the last pick, if we have options.
+    let pick = arr[Math.floor(Math.random() * arr.length)];
+    if(arr.length > 1 && pick && pick.id && String(pick.id) === String(lastRandomPickId)){
+      for(let i=0;i<8;i++){
+        const cand = arr[Math.floor(Math.random() * arr.length)];
+        if(cand && cand.id && String(cand.id) !== String(lastRandomPickId)){ pick = cand; break; }
+      }
+    }
+
+    if(pick && pick.id){
+      saveLastRandomPick(pick.id);
+      openModal(pick.id);
+      UI.toast("Random pick: " + (pick.title || "—"));
+    }else{
+      UI.toast("No movies to pick from.");
+    }
+  }
+
+  function doRandomPick(){
+    const wishPage = document.getElementById("pageWish");
+    const isWish = !!(wishPage && wishPage.classList.contains("active"));
+    const arr = isWish ? getWishFilteredSorted() : getFilteredSorted();
+    pickRandomFrom(arr);
+  }
+
   function openModal(id){
     const m = getMovie(id);
     if(!m) return;
@@ -3124,6 +3164,15 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     }
     if(UI.el.wishBackBtn){
       UI.el.wishBackBtn.addEventListener("click", () => showPage("library", UI.el.q));
+    }
+
+    // Random pick (avoids repeating last pick when possible)
+    if(UI.el.randomPickPill){
+      const go = () => doRandomPick();
+      UI.el.randomPickPill.addEventListener("click", go);
+      UI.el.randomPickPill.addEventListener("keydown", (e) => {
+        if(e.key === "Enter" || e.key === " "){ e.preventDefault(); go(); }
+      });
     }
 
 
