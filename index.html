@@ -999,7 +999,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.18-wishlist-page-random-pick";
+const APP_VERSION = "v3.1.19-wishlist-page-random-pick-fix";
 
   function applyAppVersion(){
     try{
@@ -1273,6 +1273,7 @@ const UI = (() => {
     versionPill: document.getElementById("versionPill"),
     countPill: document.getElementById("countPill"),
     wishCountPill: document.getElementById("wishCountPill"),
+    randomPickPill: document.getElementById("randomPickPill"),
     wish: document.getElementById("wish"),
     wishQ: document.getElementById("wishQ"),
     wishSort: document.getElementById("wishSort"),
