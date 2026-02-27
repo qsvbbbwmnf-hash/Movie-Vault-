@@ -68,6 +68,10 @@
       align-items:start;
     }
     @media (max-width: 900px){ .grid{ grid-template-columns: 1fr; } }
+    /* Page switching (Library vs Wish List) */
+    .page{ display:none; }
+    .page.active{ display:block; }
+
     .card{
       border:1px solid var(--stroke);
       border-radius: var(--r);
@@ -649,56 +653,62 @@
     </header>
 
     <div class="grid">
-      <!-- List -->
-      <section class="card" id="libraryCard">
-        <div class="hd">
-          <h2>Library</h2>
-          <div class="row">
-            <input id="q" placeholder="Search title/director…" style="max-width:260px;" />
-            <select id="sort" class="btn small" style="padding:9px 10px;">
-              <option value="added_desc">Newest</option>
-              <option value="added_asc">Oldest</option>
-              <option value="title_asc" selected>Title A→Z</option>
-              <option value="title_desc">Title Z→A</option>
-              <option value="release_desc">Release ↓</option>
-              <option value="release_asc">Release ↑</option>
-            </select>
-          </div>
-        </div>
-        <div class="bd">
-          <div id="azBar" class="azBar" aria-label="A to Z jump bar"></div>
-          <div id="list" class="list"></div>
-          <div id="empty" class="hint" style="display:none; padding:10px 2px;">
-            Empty vault. Add your first movie on the left.
-          </div>
-        </div>
-      </section>
 
-      <!-- Wish List -->
-      <section class="card" id="wishCard">
-        <div class="hd">
-          <h2>Wish List</h2>
-          <div class="row">
-            <input id="wishQ" placeholder="Search wish list…" style="max-width:260px;" />
-            <select id="wishSort" class="btn small" style="padding:9px 10px;">
-              <option value="added_desc">Newest</option>
-              <option value="added_asc">Oldest</option>
-              <option value="title_asc" selected>Title A→Z</option>
-              <option value="title_desc">Title Z→A</option>
-              <option value="release_desc">Release ↓</option>
-              <option value="release_asc">Release ↑</option>
-            </select>
+      <!-- Library page -->
+      <div id="pageLibrary" class="page active">
+        <section class="card" id="libraryCard">
+          <div class="hd">
+            <h2>Library</h2>
+            <div class="row">
+              <input id="q" placeholder="Search title/director…" style="max-width:260px;" />
+              <select id="sort" class="btn small" style="padding:9px 10px;">
+                <option value="added_desc">Newest</option>
+                <option value="added_asc">Oldest</option>
+                <option value="title_asc" selected>Title A→Z</option>
+                <option value="title_desc">Title Z→A</option>
+                <option value="release_desc">Release ↓</option>
+                <option value="release_asc">Release ↑</option>
+              </select>
+            </div>
           </div>
-        </div>
-        <div class="bd">
-          <div id="wishList" class="list"></div>
-          <div id="wishEmpty" class="hint" style="display:none; padding:10px 2px;">
-            No wish list movies yet. Mark a movie as “Wish List” when adding/editing.
+          <div class="bd">
+            <div id="azBar" class="azBar" aria-label="A to Z jump bar"></div>
+            <div id="list" class="list"></div>
+            <div id="empty" class="hint" style="display:none; padding:10px 2px;">
+              Empty vault. Add your first movie on the left.
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
-    </div>
+      <!-- Wish List page -->
+      <div id="pageWish" class="page">
+        <section class="card" id="wishCard">
+          <div class="hd">
+            <h2>Wish List</h2>
+            <div class="row" style="flex-wrap:wrap;">
+              <button class="btn small ghost" id="wishBackBtn" type="button" aria-label="Back to Library">Back</button>
+              <input id="wishQ" placeholder="Search wish list…" style="max-width:260px;" />
+              <select id="wishSort" class="btn small" style="padding:9px 10px;">
+                <option value="added_desc">Newest</option>
+                <option value="added_asc">Oldest</option>
+                <option value="title_asc" selected>Title A→Z</option>
+                <option value="title_desc">Title Z→A</option>
+                <option value="release_desc">Release ↓</option>
+                <option value="release_asc">Release ↑</option>
+              </select>
+            </div>
+          </div>
+          <div class="bd">
+            <div id="wishList" class="list"></div>
+            <div id="wishEmpty" class="hint" style="display:none; padding:10px 2px;">
+              No wish list movies yet. Mark a movie as “Wish List” when adding/editing.
+            </div>
+          </div>
+        </section>
+      </div>
+
+        </div>
   </div>
 
 
@@ -1267,6 +1277,9 @@ const UI = (() => {
     wishSort: document.getElementById("wishSort"),
     wishList: document.getElementById("wishList"),
     wishEmpty: document.getElementById("wishEmpty"),
+    pageLibrary: document.getElementById("pageLibrary"),
+    pageWish: document.getElementById("pageWish"),
+    wishBackBtn: document.getElementById("wishBackBtn"),
     // add/edit modal
     addMovieBtn: document.getElementById("addMovieBtn"),
     collectionsBtn: document.getElementById("collectionsBtn"),
@@ -3078,27 +3091,39 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       });
     }
 
-    // Movie/Wish pills act like jump buttons (fast navigation)
-    const jumpTo = (cardId, focusEl) => {
-      const card = document.getElementById(cardId);
-      if(!card) return;
-      try{ card.scrollIntoView({ behavior: "smooth", block: "start" }); }catch(_){ card.scrollIntoView(); }
+    // Movie/Wish pills switch pages (Library vs Wish List)
+    const showPage = (which, focusEl) => {
+      const lib = UI.el.pageLibrary || document.getElementById("pageLibrary");
+      const wish = UI.el.pageWish || document.getElementById("pageWish");
+      const isWish = (which === "wish");
+      if(lib) lib.classList.toggle("active", !isWish);
+      if(wish) wish.classList.toggle("active", isWish);
+
+      // Scroll to top so it feels like a real page
+      try{ window.scrollTo({ top: 0, behavior: "smooth" }); }catch(_){ window.scrollTo(0,0); }
+
       if(focusEl){
-        // iOS Safari: give scroll a beat so focus doesn't fight it
+        // iOS Safari: give the layout a beat
         setTimeout(() => { try{ focusEl.focus(); }catch(_){ } }, 250);
       }
     };
+
     if(UI.el.countPill){
-      UI.el.countPill.addEventListener("click", () => jumpTo("libraryCard", UI.el.q));
+      const go = () => showPage("library", UI.el.q);
+      UI.el.countPill.addEventListener("click", go);
       UI.el.countPill.addEventListener("keydown", (e) => {
-        if(e.key === "Enter" || e.key === " "){ e.preventDefault(); jumpTo("libraryCard", UI.el.q); }
+        if(e.key === "Enter" || e.key === " "){ e.preventDefault(); go(); }
       });
     }
     if(UI.el.wishCountPill){
-      UI.el.wishCountPill.addEventListener("click", () => jumpTo("wishCard", UI.el.wishQ));
+      const go = () => showPage("wish", UI.el.wishQ);
+      UI.el.wishCountPill.addEventListener("click", go);
       UI.el.wishCountPill.addEventListener("keydown", (e) => {
-        if(e.key === "Enter" || e.key === " "){ e.preventDefault(); jumpTo("wishCard", UI.el.wishQ); }
+        if(e.key === "Enter" || e.key === " "){ e.preventDefault(); go(); }
       });
+    }
+    if(UI.el.wishBackBtn){
+      UI.el.wishBackBtn.addEventListener("click", () => showPage("library", UI.el.q));
     }
 
 
