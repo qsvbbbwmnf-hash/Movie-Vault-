@@ -141,14 +141,14 @@
 
     .azBar{
       position: sticky;
-      top: calc(var(--stickyTop, 0px) + 6px);
+      top: var(--stickyTop, 0px);
       z-index: 120;
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
       padding: 8px 8px;
       margin: 0 0 10px;
-      background: rgba(11,13,18,.92);
+      background: rgba(11,13,18,1);
       border: 1px solid rgba(255,255,255,.14);
       border-radius: 14px;
       backdrop-filter: blur(8px);
@@ -1004,7 +1004,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.21-sticky-header-seam-fix";
+const APP_VERSION = "v3.1.22-sticky-gap-fix";
 
   function applyAppVersion(){
     try{
