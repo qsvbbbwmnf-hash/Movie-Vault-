@@ -30,10 +30,8 @@
       z-index: 1500;
       display:flex; align-items:flex-end; justify-content:space-between; gap:12px;
       padding:10px 10px 14px;
-      background: rgba(11,13,18,.92);
+      background: var(--bg);
       border-bottom: 1px solid rgba(255,255,255,.10);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
     }
     h1{ margin:0; font-size:18px; }
     .sub{ margin:4px 0 0; color:var(--muted); font-size:12px; }
@@ -1006,7 +1004,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.20-sticky-header";
+const APP_VERSION = "v3.1.21-sticky-header-seam-fix";
 
   function applyAppVersion(){
     try{
