@@ -25,8 +25,15 @@
     }
     .wrap{ max-width:980px; margin:0 auto; padding:18px 14px 30px; }
     header{
+      position: sticky;
+      top: 0;
+      z-index: 1500;
       display:flex; align-items:flex-end; justify-content:space-between; gap:12px;
       padding:10px 10px 14px;
+      background: rgba(11,13,18,.92);
+      border-bottom: 1px solid rgba(255,255,255,.10);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
     }
     h1{ margin:0; font-size:18px; }
     .sub{ margin:4px 0 0; color:var(--muted); font-size:12px; }
@@ -136,7 +143,7 @@
 
     .azBar{
       position: sticky;
-      top: 6px;
+      top: calc(var(--stickyTop, 0px) + 6px);
       z-index: 120;
       display: flex;
       flex-wrap: wrap;
@@ -999,7 +1006,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.19-wishlist-page-random-pick-fix";
+const APP_VERSION = "v3.1.20-sticky-header";
 
   function applyAppVersion(){
     try{
@@ -2396,6 +2403,14 @@ function renderCollectionPick(){
     return '#';
   }
 
+  function setHeaderHeightVar(){
+    // Keep sticky offsets correct so the header and A–Z bar don't overlap.
+    const hdr = document.querySelector('header');
+    if(!hdr) return;
+    const h = hdr.getBoundingClientRect().height || 0;
+    document.documentElement.style.setProperty('--stickyTop', h + 'px');
+  }
+
   function setAzBarHeightVar(){
     // Used to offset sticky letter headers so they sit just beneath the sticky A–Z bar.
     if(!UI || !UI.el || !UI.el.azBar) return;
@@ -2493,8 +2508,9 @@ function renderCollectionPick(){
     pulseAZ(L);
 
     const barH = UI.el.azBar ? UI.el.azBar.getBoundingClientRect().height : 0;
+    const stickyH = (document.querySelector('header') ? (document.querySelector('header').getBoundingClientRect().height || 0) : 0);
     const rect = target.getBoundingClientRect();
-    const top = rect.top + window.scrollY - (barH + 16);
+    const top = rect.top + window.scrollY - (stickyH + barH + 16);
     window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   }
 
@@ -2738,6 +2754,7 @@ let editingId = null;
   }
 
   function render(){
+    setHeaderHeightVar();
     const arr = getFilteredSorted();
     lastRendered = arr;
     UI.renderList(arr);
@@ -3737,7 +3754,7 @@ document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeToolsM
       });
     // Scroll spy: keep A–Z highlight in sync while scrolling
     window.addEventListener("scroll", scheduleScrollSpy, { passive: true });
-    window.addEventListener("resize", () => { setAzBarHeightVar(); scheduleScrollSpy(); });
+    window.addEventListener("resize", () => { setHeaderHeightVar(); setAzBarHeightVar(); scheduleScrollSpy(); });
 
     }
 
