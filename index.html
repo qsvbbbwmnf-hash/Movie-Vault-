@@ -1004,7 +1004,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.24-pick-close-fix";
+const APP_VERSION = "v3.1.25-total-counts";
 
   function applyAppVersion(){
     try{
@@ -1663,6 +1663,14 @@ const App = (() => {
   }
 
 
+  function getCollectionTotalMovieCount(colId){
+    // Count movies filed directly in this collection + all descendant sub-collections.
+    const direct = (state.movies||[]).filter(m => String(m.collectionId||"") === String(colId||"")).length;
+    const desc = getDescendantMovieCount(colId);
+    return direct + desc;
+  }
+
+
   function getCollectionPath(collectionId){
     // Returns [{id,name}, ...] from root to current. Guards against loops.
     const out = [];
@@ -1793,7 +1801,7 @@ const App = (() => {
 
       const count = document.createElement("div");
       count.className = "collectionCount";
-      const n = state.movies.filter(m => (m.collectionId||"") === c.id).length;
+      const n = getCollectionTotalMovieCount(c.id);
       count.textContent = n + (n===1 ? " movie" : " movies");
 
       meta.appendChild(name);
@@ -2034,7 +2042,7 @@ function refreshCollectionSelectOptions(selectedId){
 
       const count = document.createElement("div");
       count.className = "collectionCount";
-      const n = state.movies.filter(m => (m.collectionId||"") === c.id).length;
+      const n = getCollectionTotalMovieCount(c.id);
       count.textContent = n + (n===1 ? " movie" : " movies");
 
       meta.appendChild(name);
