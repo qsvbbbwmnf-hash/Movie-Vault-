@@ -1004,7 +1004,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.23-modal-overlay-fix";
+const APP_VERSION = "v3.1.24-pick-close-fix";
 
   function applyAppVersion(){
     try{
@@ -3200,6 +3200,12 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
         if(e.target === UI.el.formModal) closeFormAndReturnIfNeededApp();
       });
     }
+
+    // Auto-fill picker modal
+    if(UI.el.pickCloseBtn) UI.el.pickCloseBtn.addEventListener("click", closePick);
+    if(UI.el.pickModal) UI.el.pickModal.addEventListener("click", (e)=>{
+      if(e.target === UI.el.pickModal) closePick();
+    });
 
     // Keys modal
     if(UI.el.keysCloseBtn) UI.el.keysCloseBtn.addEventListener("click", closeKeys);
