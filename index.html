@@ -349,7 +349,7 @@
     .modal{
       position:fixed; inset:0;
       display:none; place-items:center;
-      background: rgba(0,0,0,.62);
+      background: rgba(0,0,0,.78);
       padding:16px;
       z-index:4000;
     }
@@ -361,7 +361,7 @@
       flex-direction: column;
       border-radius: 18px;
       border:1px solid rgba(255,255,255,.16);
-      background: rgba(20,22,30,.92);
+      background: rgba(20,22,30,.985);
       box-shadow: 0 24px 80px rgba(0,0,0,.55);
       overflow: hidden;
     }
@@ -1010,7 +1010,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.26-lazy-poster-rendering";
+const APP_VERSION = "v3.1.27-hierarchy-view-fix";
 
   function applyAppVersion(){
     try{
@@ -2129,7 +2129,14 @@ function refreshCollectionSelectOptions(selectedId){
   }
 
   function getMoviesInCollection(colId){
-    return state.movies.filter(m => (m.collectionId||"") === colId);
+    const id = String(colId || "");
+    // IMPORTANT: direct members only. Sub-folder movies should stay in sub-folders
+    // and should not be flattened into the parent collection detail view.
+    return (state.movies || []).filter(m => String(m.collectionId || "") === id);
+  }
+
+  function getSubcollectionsWrap(){
+    try{ return UI.el.subcollectionsGrid ? UI.el.subcollectionsGrid.closest(".subcolsWrap") : null; }catch(_){ return null; }
   }
 
   function titleSort(a,b,dir){
@@ -2221,12 +2228,19 @@ function getCollectionMoviesFilteredAndSorted(col){
       return;
     }
 
+    // Keep hierarchy UI fresh every time detail renders. This protects against
+    // regressions where the movie list re-renders but the sub-folder grid does not.
+    try{ renderCollectionBreadcrumbs(col.id); }catch(_){ }
+    try{ renderSubcollections(col.id); }catch(_){ }
+    const subWrap = getSubcollectionsWrap();
+    const subCount = getChildCollections(col.id).length;
+    if(subWrap) subWrap.style.display = "block";
+
     const result = getCollectionMoviesFilteredAndSorted(col);
     const movies = result.movies;
 
-    const subCount = getChildCollections(col.id).length;
     const qNow = (UI.el.collectionQ && UI.el.collectionQ.value || "").trim();
-    const left = qNow ? (movies.length + (movies.length===1 ? " match" : " matches")) : (movies.length + (movies.length===1 ? " movie" : " movies"));
+    const left = qNow ? (movies.length + (movies.length===1 ? " match" : " matches")) : (movies.length + (movies.length===1 ? " direct movie" : " direct movies"));
     const right = subCount + (subCount===1 ? " folder" : " folders");
     const descMovies = getDescendantMovieCount(col.id);
     const tail = descMovies ? ` • ${descMovies} in sub-folders` : "";
@@ -2237,7 +2251,7 @@ function getCollectionMoviesFilteredAndSorted(col){
     if(movies.length){
       UI.el.collectionEmpty.style.display = "none";
     }else{
-      const hasSubs = getChildCollections(col.id).length > 0;
+      const hasSubs = subCount > 0;
       const desc = getDescendantMovieCount(col.id);
       UI.el.collectionEmpty.style.display = "block";
       if(hasSubs && desc){
