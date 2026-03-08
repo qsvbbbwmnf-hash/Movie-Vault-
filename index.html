@@ -569,6 +569,12 @@
       line-height:1.1;
       padding:6px;
     }
+    .deferredImg{
+      background: rgba(255,255,255,.05);
+    }
+    .deferredImg[data-src]{
+      opacity: .92;
+    }
     .collectionName{ font-weight:900; font-size:13px; }
     .collectionCount{ color:var(--muted); font-size:12px; margin-top:2px; }
 
@@ -911,10 +917,7 @@
             <button class="btn small primary grow" id="collectionAddExistingBtn" type="button">Add Existing</button>
             <button class="btn small ghost grow" id="collectionAddNewBtn" type="button">Add New</button>
             <button class="btn small ghost grow" id="collectionAddSubBtn" type="button">New Sub-Collection</button>
-            <button class="btn small ghost grow" id="collectionInspectBtn" type="button">Inspect</button>
-            <button class="btn small ghost grow" id="collectionRepairBtn" type="button">Repair</button>
           </div>
-          <div class="hint" id="collectionDebugHint" style="padding:2px 2px 0; display:none;"></div>
           <div id="collectionCrumbs" class="crumbs" aria-label="Collection breadcrumbs"></div>
 
           <div class="subcolsWrap">
@@ -980,28 +983,6 @@
   </div>
 
 
-  <!-- Collection Inspector modal -->
-  <div class="modal" id="inspectorModal" role="dialog" aria-modal="true" aria-label="Collection inspector">
-    <div class="sheet" id="inspectorSheet">
-      <div class="top">
-        <div style="min-width:0;">
-          <div style="font-weight:900; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Collection Inspector</div>
-          <div style="color:rgba(255,255,255,.68); font-size:12px;" id="inspectorSub">Hierarchy report</div>
-        </div>
-        <div class="row">
-          <button class="btn small ghost" id="inspectorCloseBtn" type="button">Close</button>
-        </div>
-      </div>
-      <div class="body stack">
-        <div class="hint">This shows what the vault thinks is true. Useful when the UI starts acting like a raccoon on espresso.</div>
-        <pre id="inspectorReport" style="margin:0; white-space:pre-wrap; font:12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; color:rgba(255,255,255,.9); background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.10); border-radius:12px; padding:12px;"></pre>
-        <div class="row" style="gap:10px; flex-wrap:wrap;">
-          <button class="btn small ghost" id="inspectorRunRepairBtn" type="button">Run Repair</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <div class="toast" id="toast"></div>
 
 <script>
@@ -1029,7 +1010,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.28-hierarchy-inspector-repair";
+const APP_VERSION = "v3.1.26-lazy-poster-rendering";
 
   function applyAppVersion(){
     try{
@@ -1338,12 +1319,6 @@ const UI = (() => {
     pickSheet: document.getElementById("pickSheet"),
     pickCloseBtn: document.getElementById("pickCloseBtn"),
     pickList: document.getElementById("pickList"),
-    inspectorModal: document.getElementById("inspectorModal"),
-    inspectorSheet: document.getElementById("inspectorSheet"),
-    inspectorCloseBtn: document.getElementById("inspectorCloseBtn"),
-    inspectorReport: document.getElementById("inspectorReport"),
-    inspectorSub: document.getElementById("inspectorSub"),
-    inspectorRunRepairBtn: document.getElementById("inspectorRunRepairBtn"),
     azBar: document.getElementById("azBar"),
     toast: document.getElementById("toast"),
     // collections
@@ -1364,10 +1339,6 @@ const UI = (() => {
     folderOrderBtn: document.getElementById("folderOrderBtn"),
     collectionAddExistingBtn: document.getElementById("collectionAddExistingBtn"),
     collectionAddNewBtn: document.getElementById("collectionAddNewBtn"),
-    collectionAddSubBtn: document.getElementById("collectionAddSubBtn"),
-    collectionInspectBtn: document.getElementById("collectionInspectBtn"),
-    collectionRepairBtn: document.getElementById("collectionRepairBtn"),
-    collectionDebugHint: document.getElementById("collectionDebugHint"),
     collectionQ: document.getElementById("collectionQ"),
     collectionSort: document.getElementById("collectionSort"),
     collectionList: document.getElementById("collectionList"),
@@ -1493,6 +1464,73 @@ const UI = (() => {
     }
   }
 
+  const DEFERRED_IMG_PLACEHOLDER = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
+  let deferredImgObserver = null;
+
+  function ensureDeferredImgObserver(){
+    if(deferredImgObserver) return deferredImgObserver;
+    if(typeof IntersectionObserver !== "function") return null;
+    deferredImgObserver = new IntersectionObserver((entries, observer) => {
+      for(const entry of entries){
+        if(!entry.isIntersecting) continue;
+        const img = entry.target;
+        const src = img.getAttribute("data-src") || "";
+        if(src){
+          img.src = src;
+          img.removeAttribute("data-src");
+        }
+        observer.unobserve(img);
+      }
+    }, {
+      root: null,
+      rootMargin: "420px 0px",
+      threshold: 0.01,
+    });
+    return deferredImgObserver;
+  }
+
+  function hydrateDeferredImages(root){
+    const scope = root || document;
+    const imgs = scope.querySelectorAll ? scope.querySelectorAll("img[data-src]") : [];
+    if(!imgs || !imgs.length) return;
+    const observer = ensureDeferredImgObserver();
+    imgs.forEach((img) => {
+      if(!img.getAttribute("src")) img.src = DEFERRED_IMG_PLACEHOLDER;
+      if(observer){
+        observer.observe(img);
+      }else{
+        const src = img.getAttribute("data-src") || "";
+        if(src){
+          img.src = src;
+          img.removeAttribute("data-src");
+        }
+      }
+    });
+  }
+
+  function deferredThumbMarkup(src, alt){
+    const safeSrc = esc(src || "");
+    const safeAlt = esc(alt || "Poster");
+    return `<img class="thumb deferredImg" alt="${safeAlt}" src="${DEFERRED_IMG_PLACEHOLDER}" data-src="${safeSrc}" loading="lazy" decoding="async" fetchpriority="low" />`;
+  }
+
+  function deferredThumbMarkupH(src, alt){
+    const safeSrc = escH(src || "");
+    const safeAlt = escH(alt || "Poster");
+    return `<img class="thumb deferredImg" alt="${safeAlt}" src="${DEFERRED_IMG_PLACEHOLDER}" data-src="${safeSrc}" loading="lazy" decoding="async" fetchpriority="low" />`;
+  }
+
+  function setDeferredImgElement(img, src, alt, kind){
+    if(!img) return;
+    img.className = `${kind || "thumb"} deferredImg`;
+    img.alt = alt || "Artwork";
+    img.src = DEFERRED_IMG_PLACEHOLDER;
+    img.setAttribute("data-src", src || "");
+    img.setAttribute("loading", "lazy");
+    img.setAttribute("decoding", "async");
+    img.setAttribute("fetchpriority", "low");
+  }
+
   function renderList(movies){
     const handle = "";
     el.list.innerHTML = "";
@@ -1518,7 +1556,7 @@ const UI = (() => {
       div.dataset.id = m.id;
       const posterSrc = (m.poster || m.posterRemote || "");
       const thumb = posterSrc
-        ? `<img class="thumb" alt="Poster" src="${esc(posterSrc)}" />`
+        ? deferredThumbMarkup(posterSrc, m.title || "Poster")
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
 
       const year = (m.release || "").trim().slice(0,4);
@@ -1534,6 +1572,7 @@ const UI = (() => {
       `;
       el.list.appendChild(div);
     }
+    hydrateDeferredImages(el.list);
   }
 
 
@@ -1563,7 +1602,7 @@ const UI = (() => {
 
       const posterSrc = (m.poster || m.posterRemote || "");
       const thumb = posterSrc
-        ? `<img class="thumb" alt="Poster" src="${esc(posterSrc)}" />`
+        ? deferredThumbMarkup(posterSrc, m.title || "Poster")
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
 
       const year = (m.release || "").trim().slice(0,4);
@@ -1579,6 +1618,7 @@ const UI = (() => {
       `;
       list.appendChild(div);
     }
+    hydrateDeferredImages(list);
   }
 
 function renderAZBar(enabledSet, activeLetter){
@@ -1621,8 +1661,6 @@ function renderAZBar(enabledSet, activeLetter){
 
   function openPickModal(){ el.pickModal && el.pickModal.classList.add("open"); }
   function closePickModal(){ el.pickModal && el.pickModal.classList.remove("open"); }
-  function openInspectorModal(){ el.inspectorModal && el.inspectorModal.classList.add("open"); }
-  function closeInspectorModal(){ el.inspectorModal && el.inspectorModal.classList.remove("open"); }
 
   function openModal(m){
     const prettyRelease = formatReleaseDate(m.release);
@@ -1659,7 +1697,7 @@ function renderAZBar(enabledSet, activeLetter){
     if(el.versionPill) el.versionPill.textContent = v || "";
   }
 
-  return { el, toast, toastAction, setVersion, setCount, setWishCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, renderWishList, renderAZBar, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openInspectorModal, closeInspectorModal, openModal, closeModal };
+  return { el, toast, toastAction, setVersion, setCount, setWishCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, renderWishList, renderAZBar, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openModal, closeModal };
 })();
 
 /* 4) App */
@@ -1822,9 +1860,7 @@ const App = (() => {
       let artNode;
       if(c.artwork){
         artNode = document.createElement("img");
-        artNode.className = "collectionArt";
-        artNode.alt = "Artwork";
-        artNode.src = c.artwork;
+        setDeferredImgElement(artNode, c.artwork, "Artwork", "collectionArt");
       }else{
         artNode = document.createElement("div");
         artNode.className = "collectionArt ph";
@@ -1849,6 +1885,7 @@ const App = (() => {
 
       grid.appendChild(card);
     }
+    hydrateDeferredImages(grid);
   }
 
 
@@ -1934,7 +1971,6 @@ function refreshCollectionSelectOptions(selectedId){
 
   function closeCollections(){
     UI.el.collectionsModal.classList.remove("open");
-    UI.closeInspectorModal && UI.closeInspectorModal();
     azSuspended = false;
     setAzBarHeightVar();
     updateAZBar();
@@ -2064,9 +2100,7 @@ function refreshCollectionSelectOptions(selectedId){
       let artNode;
       if(c.artwork){
         artNode = document.createElement("img");
-        artNode.className = "collectionArt";
-        artNode.alt = "Artwork";
-        artNode.src = c.artwork;
+        setDeferredImgElement(artNode, c.artwork, "Artwork", "collectionArt");
       }else{
         artNode = document.createElement("div");
         artNode.className = "collectionArt ph";
@@ -2091,6 +2125,7 @@ function refreshCollectionSelectOptions(selectedId){
 
       grid.appendChild(card);
     }
+    hydrateDeferredImages(grid);
   }
 
   function getMoviesInCollection(colId){
@@ -2177,212 +2212,6 @@ function getCollectionMoviesFilteredAndSorted(col){
     return { movies };
   }
 
-
-  function getDirectMovieCount(colId){
-    return (state.movies||[]).filter(m => String(m.collectionId||"") === String(colId||"")).length;
-  }
-
-  function getHierarchyDiagnostics(targetId){
-    const collections = Array.isArray(state.collections) ? state.collections : [];
-    const movies = Array.isArray(state.movies) ? state.movies : [];
-    const ids = new Set(collections.map(c => String(c.id||"")));
-    const badParents = [];
-    const selfParents = [];
-    const cycleRoots = [];
-    const badMovieRefs = [];
-
-    function hasCycle(startId){
-      let cur = getCollection(startId);
-      const seen = new Set();
-      while(cur && cur.parentId){
-        const pid = String(cur.parentId||"");
-        if(pid === String(startId)) return true;
-        if(seen.has(pid)) return true;
-        seen.add(pid);
-        cur = getCollection(pid);
-      }
-      return false;
-    }
-
-    for(const c of collections){
-      const pid = String(c.parentId||"");
-      if(!pid) continue;
-      if(pid === String(c.id||"")) selfParents.push(c.name || c.id);
-      else if(!ids.has(pid)) badParents.push(c.name || c.id);
-      else if(hasCycle(c.id)) cycleRoots.push(c.name || c.id);
-    }
-
-    for(const m of movies){
-      const cid = String(m.collectionId||"");
-      if(cid && !ids.has(cid)) badMovieRefs.push(m.title || m.id);
-    }
-
-    let target = targetId ? getCollection(targetId) : null;
-    let targetChildIds = [];
-    let targetDescIds = [];
-    let targetDirectMovies = 0;
-    let targetDescMovies = 0;
-    if(target){
-      targetChildIds = getChildCollections(target.id).map(c => String(c.id));
-      targetDescIds = getDescendantCollectionIds(target.id).map(String);
-      targetDirectMovies = getDirectMovieCount(target.id);
-      targetDescMovies = getDescendantMovieCount(target.id);
-    }
-
-    return {
-      target,
-      targetChildIds,
-      targetDescIds,
-      targetDirectMovies,
-      targetDescMovies,
-      badParents,
-      selfParents,
-      cycleRoots,
-      badMovieRefs,
-      collectionCount: collections.length,
-      movieCount: movies.length,
-      topLevelCount: collections.filter(c => !String(c.parentId||"")).length
-    };
-  }
-
-  function formatHierarchyReport(targetId){
-    const d = getHierarchyDiagnostics(targetId);
-    const lines = [];
-    lines.push(`Vault collections: ${d.collectionCount}`);
-    lines.push(`Vault movies: ${d.movieCount}`);
-    lines.push(`Top-level folders: ${d.topLevelCount}`);
-    lines.push("");
-    if(d.target){
-      lines.push(`Current folder: ${d.target.name}`);
-      lines.push(`Direct child folders: ${d.targetChildIds.length}`);
-      lines.push(`Descendant folders: ${d.targetDescIds.length}`);
-      lines.push(`Direct movies here: ${d.targetDirectMovies}`);
-      lines.push(`Movies in descendants: ${d.targetDescMovies}`);
-      lines.push(`Total visible family movies: ${d.targetDirectMovies + d.targetDescMovies}`);
-      if(d.targetChildIds.length){
-        lines.push(`Children: ${d.targetChildIds.map(id => (getCollection(id)?.name || id)).join(', ')}`);
-      }
-      lines.push("");
-    }
-    lines.push(`Broken parent links: ${d.badParents.length}`);
-    if(d.badParents.length) lines.push(` - ${d.badParents.slice(0,12).join(', ')}`);
-    lines.push(`Self-parent loops: ${d.selfParents.length}`);
-    if(d.selfParents.length) lines.push(` - ${d.selfParents.slice(0,12).join(', ')}`);
-    lines.push(`Cycle suspects: ${d.cycleRoots.length}`);
-    if(d.cycleRoots.length) lines.push(` - ${d.cycleRoots.slice(0,12).join(', ')}`);
-    lines.push(`Movies pointing to missing folders: ${d.badMovieRefs.length}`);
-    if(d.badMovieRefs.length) lines.push(` - ${d.badMovieRefs.slice(0,12).join(', ')}`);
-    lines.push("");
-    lines.push("Repair tool will:");
-    lines.push("• clear broken or self parent links");
-    lines.push("• break simple parent cycles");
-    lines.push("• rebuild folder order and movie order arrays");
-    lines.push("• clear movie folder refs that point nowhere");
-    lines.push("");
-    lines.push("Repair will NOT guess missing parents out of thin air. That would be wizardry, not engineering.");
-    return lines.join('
-');
-  }
-
-  function updateCollectionDebugHint(colId){
-    const el = UI.el.collectionDebugHint;
-    if(!el) return;
-    const col = getCollection(colId);
-    if(!col){ el.style.display='none'; el.textContent=''; return; }
-    const directFolders = getChildCollections(col.id).length;
-    const descFolders = getDescendantCollectionIds(col.id).length;
-    const directMovies = getDirectMovieCount(col.id);
-    const descMovies = getDescendantMovieCount(col.id);
-    el.textContent = `Inspector: ${directFolders} direct folders • ${descFolders} total descendant folders • ${directMovies} direct movies • ${descMovies} movies in descendants`;
-    el.style.display = 'block';
-  }
-
-  function runHierarchyRepair(){
-    const collections = Array.isArray(state.collections) ? state.collections : [];
-    const movies = Array.isArray(state.movies) ? state.movies : [];
-    const ids = new Set(collections.map(c => String(c.id||"")));
-    let fixes = 0;
-
-    function ancestryHas(id, target){
-      let cur = getCollection(id);
-      const seen = new Set();
-      while(cur && cur.parentId){
-        const pid = String(cur.parentId||"");
-        if(pid === String(target)) return true;
-        if(seen.has(pid)) return true;
-        seen.add(pid);
-        cur = getCollection(pid);
-      }
-      return false;
-    }
-
-    for(const c of collections){
-      c.id = String(c.id||"");
-      c.parentId = String(c.parentId||"");
-      if(!Array.isArray(c.subOrder)) c.subOrder = [];
-      if(!Array.isArray(c.customOrder)) c.customOrder = [];
-      if(c.parentId && (c.parentId === c.id || !ids.has(c.parentId) || ancestryHas(c.parentId, c.id))){
-        c.parentId = "";
-        fixes++;
-      }
-    }
-
-    const liveIds = new Set(collections.map(c => String(c.id||"")));
-    for(const m of movies){
-      const cid = String(m.collectionId||"");
-      if(cid && !liveIds.has(cid)){
-        m.collectionId = "";
-        fixes++;
-      }
-    }
-
-    for(const c of collections){
-      const children = getChildCollections(c.id).map(x => String(x.id));
-      const childSet = new Set(children);
-      const rebuiltSub = [];
-      for(const id of (Array.isArray(c.subOrder) ? c.subOrder : [])){
-        const sid = String(id);
-        if(childSet.has(sid) && !rebuiltSub.includes(sid)) rebuiltSub.push(sid);
-      }
-      for(const id of children){
-        if(!rebuiltSub.includes(id)) rebuiltSub.push(id);
-      }
-      if(JSON.stringify(rebuiltSub) !== JSON.stringify(c.subOrder||[])){
-        c.subOrder = rebuiltSub;
-        fixes++;
-      }
-
-      const directMovieIds = movies.filter(m => String(m.collectionId||"") === String(c.id)).map(m => String(m.id));
-      const movieSet = new Set(directMovieIds);
-      const rebuiltOrder = [];
-      for(const id of (Array.isArray(c.customOrder) ? c.customOrder : [])){
-        const sid = String(id);
-        if(movieSet.has(sid) && !rebuiltOrder.includes(sid)) rebuiltOrder.push(sid);
-      }
-      for(const id of directMovieIds){
-        if(!rebuiltOrder.includes(id)) rebuiltOrder.push(id);
-      }
-      if(JSON.stringify(rebuiltOrder) !== JSON.stringify(c.customOrder||[])){
-        c.customOrder = rebuiltOrder;
-        fixes++;
-      }
-    }
-
-    state.appVersion = APP_VERSION;
-    Store.save(state);
-    if(currentCollectionId) updateCollectionDebugHint(currentCollectionId);
-    showCollectionsView();
-    if(UI.el.inspectorReport) UI.el.inspectorReport.textContent = formatHierarchyReport(currentCollectionId);
-    return fixes;
-  }
-
-  function openInspectorForCurrentCollection(){
-    const col = getCollection(currentCollectionId);
-    if(UI.el.inspectorSub) UI.el.inspectorSub.textContent = col ? `Hierarchy report for ${col.name}` : 'Hierarchy report';
-    if(UI.el.inspectorReport) UI.el.inspectorReport.textContent = formatHierarchyReport(currentCollectionId);
-    UI.openInspectorModal();
-  }
-
   function renderCollectionDetail(){
     const col = getCollection(currentCollectionId);
     if(!col){
@@ -2402,7 +2231,6 @@ function getCollectionMoviesFilteredAndSorted(col){
     const descMovies = getDescendantMovieCount(col.id);
     const tail = descMovies ? ` • ${descMovies} in sub-folders` : "";
     UI.el.collectionCountHint.textContent = left + " • " + right + tail;
-    updateCollectionDebugHint(col.id);
     const list = UI.el.collectionList;
     list.classList.toggle("reorderMode", collectionReorderMode);
     list.innerHTML = "";
@@ -2444,7 +2272,7 @@ function getCollectionMoviesFilteredAndSorted(col){
 
       const posterSrc = (m.poster || m.posterRemote || "");
       const thumb = posterSrc
-        ? `<img class="thumb" alt="Poster" src="${escH(posterSrc)}" />`
+        ? deferredThumbMarkupH(posterSrc, m.title || "Poster")
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
 
       const year = (m.release || "").trim().slice(0,4);
@@ -2466,6 +2294,7 @@ function getCollectionMoviesFilteredAndSorted(col){
       `;
       list.appendChild(div);
     }
+    hydrateDeferredImages(list);
   }
 
   function toggleCollectionReorder(){
@@ -3285,7 +3114,7 @@ if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollect
       const item = document.createElement("div");
       item.className = "pickItem";
       item.innerHTML = `
-        <div class="pickPoster">${poster ? `<img src="${poster}" alt="">` : "No<br>poster"}</div>
+        <div class="pickPoster">${poster ? `<img class="deferredImg" src="${DEFERRED_IMG_PLACEHOLDER}" data-src="${escapeHtml(poster)}" alt="" loading="lazy" decoding="async" fetchpriority="low">` : "No<br>poster"}</div>
         <div class="pickMeta">
           <div class="pickTitle">${escapeHtml(title)}${y ? ` (${escapeHtml(y)})` : ""}</div>
           <div class="pickSub">${escapeHtml(r.original_language ? r.original_language.toUpperCase() : "")}</div>
@@ -3302,6 +3131,7 @@ if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollect
       });
       UI.el.pickList.appendChild(item);
     });
+    hydrateDeferredImages(UI.el.pickList);
     UI.openPickModal();
   }
 
@@ -3595,26 +3425,6 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       }
       collectionsView = "edit";
       showCollectionsView();
-    });
-
-    if(UI.el.collectionInspectBtn) UI.el.collectionInspectBtn.addEventListener("click", () => {
-      if(collectionsView !== "detail" || !currentCollectionId){ UI.toast("Open a collection first."); return; }
-      openInspectorForCurrentCollection();
-    });
-
-    if(UI.el.collectionRepairBtn) UI.el.collectionRepairBtn.addEventListener("click", () => {
-      const fixes = runHierarchyRepair();
-      UI.toast(fixes ? `Hierarchy repair finished — ${fixes} fix${fixes===1?'':'es'} applied.` : "Hierarchy repair found nothing obvious to fix.");
-      openInspectorForCurrentCollection();
-    });
-
-    if(UI.el.inspectorCloseBtn) UI.el.inspectorCloseBtn.addEventListener("click", () => UI.closeInspectorModal());
-    if(UI.el.inspectorModal) UI.el.inspectorModal.addEventListener("click", (e)=>{
-      if(e.target === UI.el.inspectorModal) UI.closeInspectorModal();
-    });
-    if(UI.el.inspectorRunRepairBtn) UI.el.inspectorRunRepairBtn.addEventListener("click", () => {
-      const fixes = runHierarchyRepair();
-      UI.toast(fixes ? `Hierarchy repair finished — ${fixes} fix${fixes===1?'':'es'} applied.` : "Hierarchy repair found nothing obvious to fix.");
     });
 
     if(UI.el.collectionSaveBtn) UI.el.collectionSaveBtn.addEventListener("click", () => {
