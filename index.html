@@ -985,22 +985,27 @@
 
 
   <!-- Hierarchy Inspector modal -->
-  <div class="modal" id="hierarchyModal" role="dialog" aria-modal="true" aria-label="Hierarchy Inspector">
-    <div class="sheet" id="hierarchySheet">
+  <div class="modal" id="inspectModal" role="dialog" aria-modal="true" aria-label="Hierarchy Inspector">
+    <div class="sheet" id="inspectSheet">
       <div class="top">
         <div style="min-width:0;">
-          <div style="font-weight:900; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Hierarchy Inspector</div>
-          <div style="color:rgba(255,255,255,.68); font-size:12px;">Shows folder structure, direct counts, and repaired parent links.</div>
+          <div style="font-weight:900; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="inspectTitle">Hierarchy Inspector</div>
+          <div style="color:rgba(255,255,255,.68); font-size:12px;" id="inspectSub">Structure check for this collection.</div>
         </div>
         <div class="row">
-          <button class="btn small ghost" id="hierarchyCloseBtn" type="button">Close</button>
+          <button class="btn small ghost" id="inspectCloseBtn" type="button">Close</button>
         </div>
       </div>
-      <div class="body">
-        <pre id="hierarchyBody" style="margin:0; white-space:pre-wrap; word-break:break-word; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:rgba(255,255,255,.92);"></pre>
+      <div class="body stack">
+        <div class="kv" id="inspectKv"></div>
+        <div>
+          <label>Tree</label>
+          <pre id="inspectTree" style="margin:0; white-space:pre-wrap; line-height:1.35; font-size:12px; color:rgba(255,255,255,.88); border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.04); border-radius:12px; padding:12px; max-height:42vh; overflow:auto;"></pre>
+        </div>
       </div>
     </div>
   </div>
+
 
   <div class="toast" id="toast"></div>
 
@@ -1029,7 +1034,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.30-hierarchy-lock";
+const APP_VERSION = "v3.1.31-hierarchy-lock-fixed";
 
   function applyAppVersion(){
     try{
@@ -1340,6 +1345,13 @@ const UI = (() => {
     pickList: document.getElementById("pickList"),
     azBar: document.getElementById("azBar"),
     toast: document.getElementById("toast"),
+    inspectModal: document.getElementById("inspectModal"),
+    inspectSheet: document.getElementById("inspectSheet"),
+    inspectTitle: document.getElementById("inspectTitle"),
+    inspectSub: document.getElementById("inspectSub"),
+    inspectKv: document.getElementById("inspectKv"),
+    inspectTree: document.getElementById("inspectTree"),
+    inspectCloseBtn: document.getElementById("inspectCloseBtn"),
     // collections
     collectionsModal: document.getElementById("collectionsModal"),
     collectionsSheet: document.getElementById("collectionsSheet"),
@@ -1392,10 +1404,6 @@ const UI = (() => {
     editBtn: document.getElementById("editBtn"),
     wishToggleBtn: document.getElementById("wishToggleBtn"),
     modalDeleteBtn: document.getElementById("modalDeleteBtn"),
-    hierarchyModal: document.getElementById("hierarchyModal"),
-    hierarchySheet: document.getElementById("hierarchySheet"),
-    hierarchyCloseBtn: document.getElementById("hierarchyCloseBtn"),
-    hierarchyBody: document.getElementById("hierarchyBody"),
   };
 
   let toastTimer = null;
@@ -1685,6 +1693,8 @@ function renderAZBar(enabledSet, activeLetter){
 
   function openPickModal(){ el.pickModal && el.pickModal.classList.add("open"); }
   function closePickModal(){ el.pickModal && el.pickModal.classList.remove("open"); }
+  function openInspectModal(){ el.inspectModal && el.inspectModal.classList.add("open"); }
+  function closeInspectModal(){ el.inspectModal && el.inspectModal.classList.remove("open"); }
 
   function openModal(m){
     const prettyRelease = formatReleaseDate(m.release);
@@ -1721,100 +1731,13 @@ function renderAZBar(enabledSet, activeLetter){
     if(el.versionPill) el.versionPill.textContent = v || "";
   }
 
-  return { el, toast, toastAction, setVersion, setCount, setWishCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, renderWishList, renderAZBar, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openModal, closeModal };
+  return { el, toast, toastAction, setVersion, setCount, setWishCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, renderWishList, renderAZBar, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openInspectModal, closeInspectModal, openModal, closeModal };
 })();
 
 /* 4) App */
 const App = (() => {
   let state = Store.load();
-  let hierarchyValidationMessage = "";
-
-  function validateHierarchyOnLoad(){
-    let changed = false;
-    const notes = [];
-    const collections = Array.isArray(state.collections) ? state.collections : [];
-    const movies = Array.isArray(state.movies) ? state.movies : [];
-    const byId = new Map();
-
-    for(const c of collections){
-      c.id = String(c && c.id || "");
-      c.parentId = String(c && c.parentId || "");
-      c.name = String(c && c.name || "").trim();
-      c.customOrder = Array.isArray(c && c.customOrder) ? c.customOrder.map(String) : [];
-      c.subOrder = Array.isArray(c && c.subOrder) ? c.subOrder.map(String) : [];
-      if(c.id) byId.set(c.id, c);
-    }
-
-    for(const c of collections){
-      if(!c.id) continue;
-      if(c.parentId === c.id){
-        c.parentId = "";
-        changed = true;
-        notes.push(`Cleared self-parent on folder: ${c.name || c.id}`);
-      }
-      if(c.parentId && !byId.has(c.parentId)){
-        notes.push(`Cleared missing parent link on folder: ${c.name || c.id}`);
-        c.parentId = "";
-        changed = true;
-      }
-    }
-
-    for(const c of collections){
-      if(!c.id || !c.parentId) continue;
-      const seen = new Set([c.id]);
-      let cur = c.parentId;
-      let cycle = false;
-      while(cur){
-        if(seen.has(cur)){ cycle = true; break; }
-        seen.add(cur);
-        const parent = byId.get(cur);
-        if(!parent) break;
-        cur = String(parent.parentId || "");
-      }
-      if(cycle){
-        notes.push(`Broke parent cycle at folder: ${c.name || c.id}`);
-        c.parentId = "";
-        changed = true;
-      }
-    }
-
-    for(const m of movies){
-      m.collectionId = String(m && m.collectionId || "");
-      if(m.collectionId && !byId.has(m.collectionId)){
-        notes.push(`Unfiled movie from missing folder: ${m.title || m.id}`);
-        m.collectionId = "";
-        changed = true;
-      }
-    }
-
-    for(const c of collections){
-      const directMovieIds = movies.filter(m => String(m.collectionId||"") === c.id).map(m => String(m.id));
-      const directChildIds = collections.filter(x => String(x.parentId||"") === c.id).map(x => String(x.id));
-
-      const nextCustom = (Array.isArray(c.customOrder) ? c.customOrder : []).filter(id => directMovieIds.includes(String(id)));
-      for(const id of directMovieIds){ if(!nextCustom.includes(id)) nextCustom.push(id); }
-      if(JSON.stringify(nextCustom) !== JSON.stringify(c.customOrder || [])){
-        c.customOrder = nextCustom;
-        changed = true;
-      }
-
-      const nextSub = (Array.isArray(c.subOrder) ? c.subOrder : []).filter(id => directChildIds.includes(String(id)));
-      for(const id of directChildIds){ if(!nextSub.includes(id)) nextSub.push(id); }
-      if(JSON.stringify(nextSub) !== JSON.stringify(c.subOrder || [])){
-        c.subOrder = nextSub;
-        changed = true;
-      }
-    }
-
-    hierarchyValidationMessage = notes.length ? notes.join("\n") : "Hierarchy looks clean.";
-    return { changed, notes };
-  }
-
-  const hierarchyValidationResult = validateHierarchyOnLoad();
-  if(hierarchyValidationResult.changed){
-    try{ Store.save(state); }catch(_){}
-  }
-
+  validateHierarchyOnLoad();
   // --- Collections (full system: folders + optional artwork; custom ordering later) ---
   function escH(s){ return String(s ?? "").replace(/[&<>"\']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","\'":"&#39;" }[c])); }
   function getCollection(id){ return state.collections.find(c => c.id === id) || null; }
@@ -1855,6 +1778,83 @@ const App = (() => {
     const direct = (state.movies||[]).filter(m => String(m.collectionId||"") === String(colId||"")).length;
     const desc = getDescendantMovieCount(colId);
     return direct + desc;
+  }
+
+  function validateHierarchyOnLoad(){
+    let changed = false;
+    const ids = new Set((state.collections||[]).map(c => String(c.id||"")));
+    for(const c of (state.collections||[])) {
+      c.id = String(c.id||"");
+      c.parentId = String(c.parentId||"");
+      if(c.parentId && (c.parentId === c.id || !ids.has(c.parentId))){
+        c.parentId = "";
+        changed = true;
+      }
+      if(!Array.isArray(c.customOrder)){ c.customOrder = []; changed = true; }
+      if(!Array.isArray(c.subOrder)){ c.subOrder = []; changed = true; }
+    }
+    for(const c of (state.collections||[])) {
+      if(!c.parentId) continue;
+      let seen = new Set([c.id]);
+      let cur = getCollection(c.parentId);
+      while(cur){
+        if(seen.has(cur.id)){ c.parentId = ""; changed = true; break; }
+        seen.add(cur.id);
+        cur = cur.parentId ? getCollection(cur.parentId) : null;
+      }
+    }
+    const validIds = new Set((state.collections||[]).map(c => String(c.id||"")));
+    for(const m of (state.movies||[])){
+      const cid = String(m.collectionId||"");
+      if(cid && !validIds.has(cid)){ m.collectionId = ""; changed = true; }
+    }
+    for(const c of (state.collections||[])){
+      const directSubs = (state.collections||[]).filter(x => String(x.parentId||"") === String(c.id)).map(x => String(x.id));
+      const directMovies = (state.movies||[]).filter(m => String(m.collectionId||"") === String(c.id)).map(m => String(m.id));
+      const newSub = c.subOrder.filter(id => directSubs.includes(String(id)));
+      for(const id of directSubs){ if(!newSub.includes(id)) newSub.push(id); }
+      const newMov = c.customOrder.filter(id => directMovies.includes(String(id)));
+      for(const id of directMovies){ if(!newMov.includes(id)) newMov.push(id); }
+      if(JSON.stringify(newSub)!==JSON.stringify(c.subOrder)){ c.subOrder = newSub; changed = true; }
+      if(JSON.stringify(newMov)!==JSON.stringify(c.customOrder)){ c.customOrder = newMov; changed = true; }
+    }
+    if(changed) Store.save(state);
+  }
+
+  function buildHierarchyTree(rootId, prefix=''){
+    const col = getCollection(rootId);
+    if(!col) return '(Missing collection)';
+    const lines = [];
+    function walk(id, depth){
+      const node = getCollection(id);
+      if(!node) return;
+      const directMovies = (state.movies||[]).filter(m => String(m.collectionId||"") === String(id)).length;
+      const totalMovies = getCollectionTotalMovieCount(id);
+      lines.push(`${'  '.repeat(depth)}• ${node.name} — ${directMovies} direct / ${totalMovies} total`);
+      const kids = getChildCollections(id).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'', undefined, {sensitivity:'base'}));
+      for(const kid of kids) walk(kid.id, depth+1);
+    }
+    walk(rootId,0);
+    return lines.join('\n');
+  }
+
+  function openHierarchyInspector(){
+    const col = getCollection(currentCollectionId);
+    if(!col){ UI.toast('Open a collection first.'); return; }
+    const directFolders = getChildCollections(col.id).length;
+    const descFolders = getDescendantCollectionIds(col.id).length;
+    const directMovies = (state.movies||[]).filter(m => String(m.collectionId||"") === String(col.id)).length;
+    const descMovies = getDescendantMovieCount(col.id);
+    UI.el.inspectTitle.textContent = `Hierarchy Inspector — ${col.name}`;
+    UI.el.inspectSub.textContent = 'Direct counts vs nested counts for this collection.';
+    UI.el.inspectKv.innerHTML = `
+      <div class="row"><div class="k">Direct folders</div><div class="v">${directFolders}</div></div>
+      <div class="row"><div class="k">Descendant folders</div><div class="v">${descFolders}</div></div>
+      <div class="row"><div class="k">Direct movies</div><div class="v">${directMovies}</div></div>
+      <div class="row"><div class="k">Movies in sub-folders</div><div class="v">${descMovies}</div></div>
+      <div class="row"><div class="k">Total movies</div><div class="v">${directMovies + descMovies}</div></div>`;
+    UI.el.inspectTree.textContent = buildHierarchyTree(col.id);
+    UI.openInspectModal();
   }
 
 
@@ -2083,7 +2083,6 @@ function refreshCollectionSelectOptions(selectedId){
 
   function closeCollections(){
     UI.el.collectionsModal.classList.remove("open");
-    closeHierarchyInspector();
     azSuspended = false;
     setAzBarHeightVar();
     updateAZBar();
@@ -2325,85 +2324,6 @@ function getCollectionMoviesFilteredAndSorted(col){
     return { movies };
   }
 
-  function getDirectMovieCount(colId){
-    return (state.movies||[]).filter(m => String(m.collectionId||"") === String(colId||"")).length;
-  }
-
-  function buildHierarchyReport(rootId){
-    const lines = [];
-    const allCollections = (state.collections||[]).slice();
-    const allMovies = (state.movies||[]).slice();
-
-    function walk(id, depth, seen){
-      const col = getCollection(id);
-      if(!col) return;
-      const pad = '  '.repeat(depth);
-      const directFolders = getChildCollections(col.id);
-      const directMovies = getMoviesInCollection(col.id);
-      const descMovies = getDescendantMovieCount(col.id);
-      lines.push(`${pad}- ${col.name} [direct folders: ${directFolders.length}, direct movies: ${directMovies.length}, descendant movies: ${descMovies}]`);
-      if(seen.has(col.id)){
-        lines.push(`${pad}  * cycle blocked *`);
-        return;
-      }
-      const nextSeen = new Set(seen);
-      nextSeen.add(col.id);
-      const orderedKids = directFolders.slice();
-      if(col.subOrder && col.subOrder.length){
-        const orderMap = new Map(col.subOrder.map((x,i)=>[String(x), i]));
-        orderedKids.sort((a,b)=>{
-          const ia = orderMap.has(String(a.id)) ? orderMap.get(String(a.id)) : 1e9;
-          const ib = orderMap.has(String(b.id)) ? orderMap.get(String(b.id)) : 1e9;
-          if(ia !== ib) return ia - ib;
-          return (a.name||'').localeCompare(b.name||'', undefined, { sensitivity:'base' });
-        });
-      } else {
-        orderedKids.sort((a,b)=> (a.name||'').localeCompare(b.name||'', undefined, { sensitivity:'base' }));
-      }
-      for(const child of orderedKids) walk(child.id, depth + 1, nextSeen);
-    }
-
-    if(rootId){
-      const col = getCollection(rootId);
-      if(!col) return 'Hierarchy Inspector\n\nCollection not found.';
-      const path = getCollectionPath(rootId).map(x => x.name).join(' / ') || col.name;
-      lines.push('Hierarchy Inspector');
-      lines.push('');
-      lines.push(`Focus folder: ${col.name}`);
-      lines.push(`Path: ${path}`);
-      lines.push(`Direct folders: ${getChildCollections(col.id).length}`);
-      lines.push(`Total descendant folders: ${getDescendantCollectionIds(col.id).length}`);
-      lines.push(`Direct movies: ${getDirectMovieCount(col.id)}`);
-      lines.push(`Movies in descendants: ${getDescendantMovieCount(col.id)}`);
-      lines.push('');
-      lines.push('Tree');
-      walk(col.id, 0, new Set());
-      return lines.join('\n');
-    }
-
-    const top = allCollections.filter(c => !String(c.parentId||''));
-    lines.push('Hierarchy Inspector');
-    lines.push('');
-    lines.push(`Top-level folders: ${top.length}`);
-    lines.push(`Total folders: ${allCollections.length}`);
-    lines.push(`Total movies: ${allMovies.length}`);
-    lines.push('');
-    lines.push('Top level tree');
-    top.sort((a,b)=> (a.name||'').localeCompare(b.name||'', undefined, { sensitivity:'base' }));
-    for(const c of top) walk(c.id, 0, new Set());
-    return lines.join('\n');
-  }
-
-  function openHierarchyInspector(rootId){
-    if(!UI.el.hierarchyModal || !UI.el.hierarchyBody) return;
-    UI.el.hierarchyBody.textContent = buildHierarchyReport(rootId || currentCollectionId || '');
-    UI.el.hierarchyModal.classList.add('open');
-  }
-
-  function closeHierarchyInspector(){
-    if(UI.el.hierarchyModal) UI.el.hierarchyModal.classList.remove('open');
-  }
-
   function renderCollectionDetail(){
     const col = getCollection(currentCollectionId);
     if(!col){
@@ -2418,12 +2338,10 @@ function getCollectionMoviesFilteredAndSorted(col){
 
     const subCount = getChildCollections(col.id).length;
     const qNow = (UI.el.collectionQ && UI.el.collectionQ.value || "").trim();
-    const directMovieCount = getDirectMovieCount(col.id);
-    const left = qNow ? (movies.length + (movies.length===1 ? " match" : " matches")) : (directMovieCount + (directMovieCount===1 ? " direct movie" : " direct movies"));
-    const right = subCount + (subCount===1 ? " direct folder" : " direct folders");
+    const left = qNow ? (movies.length + (movies.length===1 ? " direct match" : " direct matches")) : (movies.length + (movies.length===1 ? " direct movie" : " direct movies"));
+    const right = subCount + (subCount===1 ? " folder" : " folders");
     const descMovies = getDescendantMovieCount(col.id);
-    const descFolders = getDescendantCollectionIds(col.id).length;
-    const tail = (descFolders || descMovies) ? ` • ${descFolders} descendant folders • ${descMovies} movies in sub-folders` : "";
+    const tail = descMovies ? ` • ${descMovies} in sub-folders` : "";
     UI.el.collectionCountHint.textContent = left + " • " + right + tail;
     const list = UI.el.collectionList;
     list.classList.toggle("reorderMode", collectionReorderMode);
@@ -3423,6 +3341,9 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
         openCollections();
       });
     }
+    if(UI.el.collectionInspectBtn) UI.el.collectionInspectBtn.addEventListener("click", openHierarchyInspector);
+    if(UI.el.inspectCloseBtn) UI.el.inspectCloseBtn.addEventListener("click", UI.closeInspectModal);
+    if(UI.el.inspectModal) UI.el.inspectModal.addEventListener("click", (e)=>{ if(e.target === UI.el.inspectModal) UI.closeInspectModal(); });
 
     // Movie/Wish pills switch pages (Library vs Wish List)
     const showPage = (which, focusEl) => {
@@ -3731,13 +3652,6 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       collectionsView = "edit";
       showCollectionsView();
     });
-
-    if(UI.el.collectionInspectBtn) UI.el.collectionInspectBtn.addEventListener("click", () => {
-      openHierarchyInspector(currentCollectionId);
-    });
-
-    if(UI.el.hierarchyCloseBtn) UI.el.hierarchyCloseBtn.addEventListener("click", closeHierarchyInspector);
-    if(UI.el.hierarchyModal) UI.el.hierarchyModal.addEventListener("click", (e) => { if(e.target === UI.el.hierarchyModal) closeHierarchyInspector(); });
 
     if(UI.el.collectionQ) UI.el.collectionQ.addEventListener("input", renderCollectionDetail);
     if(UI.el.collectionSort) UI.el.collectionSort.addEventListener("change", () => {
