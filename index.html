@@ -641,7 +641,7 @@
     <header>
       <div>
         <h1>Movie Vault</h1>
-        <div class="sub" id="buildSubtitle">Plain build — TMDb autofill (build " + APP_VERSION + ")</div>
+        <div class="sub" id="buildSubtitle">Plain build — TMDb autofill (v3.1.25a-poster-safe-main-lists)</div>
       </div>
       <div class="row" style="gap:10px; align-items:center;">
         <button class="btn small primary" id="addMovieBtn" type="button">Add Movie</button>
@@ -910,7 +910,6 @@
             </div>
             <button class="btn small ghost" id="collectionOrderBtn" type="button">Edit</button>
             <button class="btn small ghost" id="folderOrderBtn" type="button">Edit Folders</button>
-            <button class="btn small ghost" id="collectionInspectBtn" type="button">Inspect</button>
             <button class="btn small danger" id="collectionDeleteQuickBtn" type="button">Delete</button>
 </div>
 
@@ -984,29 +983,6 @@
   </div>
 
 
-  <!-- Hierarchy Inspector modal -->
-  <div class="modal" id="inspectModal" role="dialog" aria-modal="true" aria-label="Hierarchy Inspector">
-    <div class="sheet" id="inspectSheet">
-      <div class="top">
-        <div style="min-width:0;">
-          <div style="font-weight:900; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="inspectTitle">Hierarchy Inspector</div>
-          <div style="color:rgba(255,255,255,.68); font-size:12px;" id="inspectSub">Structure check for this collection.</div>
-        </div>
-        <div class="row">
-          <button class="btn small ghost" id="inspectCloseBtn" type="button">Close</button>
-        </div>
-      </div>
-      <div class="body stack">
-        <div class="kv" id="inspectKv"></div>
-        <div>
-          <label>Tree</label>
-          <pre id="inspectTree" style="margin:0; white-space:pre-wrap; line-height:1.35; font-size:12px; color:rgba(255,255,255,.88); border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.04); border-radius:12px; padding:12px; max-height:42vh; overflow:auto;"></pre>
-        </div>
-      </div>
-    </div>
-  </div>
-
-
   <div class="toast" id="toast"></div>
 
 <script>
@@ -1034,7 +1010,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.31-hierarchy-lock-fixed";
+const APP_VERSION = "v3.1.25a-poster-safe-main-lists";
 
   function applyAppVersion(){
     try{
@@ -1345,13 +1321,6 @@ const UI = (() => {
     pickList: document.getElementById("pickList"),
     azBar: document.getElementById("azBar"),
     toast: document.getElementById("toast"),
-    inspectModal: document.getElementById("inspectModal"),
-    inspectSheet: document.getElementById("inspectSheet"),
-    inspectTitle: document.getElementById("inspectTitle"),
-    inspectSub: document.getElementById("inspectSub"),
-    inspectKv: document.getElementById("inspectKv"),
-    inspectTree: document.getElementById("inspectTree"),
-    inspectCloseBtn: document.getElementById("inspectCloseBtn"),
     // collections
     collectionsModal: document.getElementById("collectionsModal"),
     collectionsSheet: document.getElementById("collectionsSheet"),
@@ -1368,7 +1337,6 @@ const UI = (() => {
     collectionCountHint: document.getElementById("collectionCountHint"),
     collectionOrderBtn: document.getElementById("collectionOrderBtn"),
     folderOrderBtn: document.getElementById("folderOrderBtn"),
-    collectionInspectBtn: document.getElementById("collectionInspectBtn"),
     collectionAddExistingBtn: document.getElementById("collectionAddExistingBtn"),
     collectionAddNewBtn: document.getElementById("collectionAddNewBtn"),
     collectionQ: document.getElementById("collectionQ"),
@@ -1546,23 +1514,6 @@ const UI = (() => {
     return `<img class="thumb deferredImg" alt="${safeAlt}" src="${DEFERRED_IMG_PLACEHOLDER}" data-src="${safeSrc}" loading="lazy" decoding="async" fetchpriority="low" />`;
   }
 
-  function deferredThumbMarkupH(src, alt){
-    const safeSrc = escH(src || "");
-    const safeAlt = escH(alt || "Poster");
-    return `<img class="thumb deferredImg" alt="${safeAlt}" src="${DEFERRED_IMG_PLACEHOLDER}" data-src="${safeSrc}" loading="lazy" decoding="async" fetchpriority="low" />`;
-  }
-
-  function setDeferredImgElement(img, src, alt, kind){
-    if(!img) return;
-    img.className = `${kind || "thumb"} deferredImg`;
-    img.alt = alt || "Artwork";
-    img.src = DEFERRED_IMG_PLACEHOLDER;
-    img.setAttribute("data-src", src || "");
-    img.setAttribute("loading", "lazy");
-    img.setAttribute("decoding", "async");
-    img.setAttribute("fetchpriority", "low");
-  }
-
   function renderList(movies){
     const handle = "";
     el.list.innerHTML = "";
@@ -1693,8 +1644,6 @@ function renderAZBar(enabledSet, activeLetter){
 
   function openPickModal(){ el.pickModal && el.pickModal.classList.add("open"); }
   function closePickModal(){ el.pickModal && el.pickModal.classList.remove("open"); }
-  function openInspectModal(){ el.inspectModal && el.inspectModal.classList.add("open"); }
-  function closeInspectModal(){ el.inspectModal && el.inspectModal.classList.remove("open"); }
 
   function openModal(m){
     const prettyRelease = formatReleaseDate(m.release);
@@ -1731,13 +1680,12 @@ function renderAZBar(enabledSet, activeLetter){
     if(el.versionPill) el.versionPill.textContent = v || "";
   }
 
-  return { el, toast, toastAction, setVersion, setCount, setWishCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, renderWishList, renderAZBar, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openInspectModal, closeInspectModal, openModal, closeModal };
+  return { el, toast, toastAction, setVersion, setCount, setWishCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, renderWishList, renderAZBar, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openModal, closeModal };
 })();
 
 /* 4) App */
 const App = (() => {
   let state = Store.load();
-  validateHierarchyOnLoad();
   // --- Collections (full system: folders + optional artwork; custom ordering later) ---
   function escH(s){ return String(s ?? "").replace(/[&<>"\']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","\'":"&#39;" }[c])); }
   function getCollection(id){ return state.collections.find(c => c.id === id) || null; }
@@ -1778,83 +1726,6 @@ const App = (() => {
     const direct = (state.movies||[]).filter(m => String(m.collectionId||"") === String(colId||"")).length;
     const desc = getDescendantMovieCount(colId);
     return direct + desc;
-  }
-
-  function validateHierarchyOnLoad(){
-    let changed = false;
-    const ids = new Set((state.collections||[]).map(c => String(c.id||"")));
-    for(const c of (state.collections||[])) {
-      c.id = String(c.id||"");
-      c.parentId = String(c.parentId||"");
-      if(c.parentId && (c.parentId === c.id || !ids.has(c.parentId))){
-        c.parentId = "";
-        changed = true;
-      }
-      if(!Array.isArray(c.customOrder)){ c.customOrder = []; changed = true; }
-      if(!Array.isArray(c.subOrder)){ c.subOrder = []; changed = true; }
-    }
-    for(const c of (state.collections||[])) {
-      if(!c.parentId) continue;
-      let seen = new Set([c.id]);
-      let cur = getCollection(c.parentId);
-      while(cur){
-        if(seen.has(cur.id)){ c.parentId = ""; changed = true; break; }
-        seen.add(cur.id);
-        cur = cur.parentId ? getCollection(cur.parentId) : null;
-      }
-    }
-    const validIds = new Set((state.collections||[]).map(c => String(c.id||"")));
-    for(const m of (state.movies||[])){
-      const cid = String(m.collectionId||"");
-      if(cid && !validIds.has(cid)){ m.collectionId = ""; changed = true; }
-    }
-    for(const c of (state.collections||[])){
-      const directSubs = (state.collections||[]).filter(x => String(x.parentId||"") === String(c.id)).map(x => String(x.id));
-      const directMovies = (state.movies||[]).filter(m => String(m.collectionId||"") === String(c.id)).map(m => String(m.id));
-      const newSub = c.subOrder.filter(id => directSubs.includes(String(id)));
-      for(const id of directSubs){ if(!newSub.includes(id)) newSub.push(id); }
-      const newMov = c.customOrder.filter(id => directMovies.includes(String(id)));
-      for(const id of directMovies){ if(!newMov.includes(id)) newMov.push(id); }
-      if(JSON.stringify(newSub)!==JSON.stringify(c.subOrder)){ c.subOrder = newSub; changed = true; }
-      if(JSON.stringify(newMov)!==JSON.stringify(c.customOrder)){ c.customOrder = newMov; changed = true; }
-    }
-    if(changed) Store.save(state);
-  }
-
-  function buildHierarchyTree(rootId, prefix=''){
-    const col = getCollection(rootId);
-    if(!col) return '(Missing collection)';
-    const lines = [];
-    function walk(id, depth){
-      const node = getCollection(id);
-      if(!node) return;
-      const directMovies = (state.movies||[]).filter(m => String(m.collectionId||"") === String(id)).length;
-      const totalMovies = getCollectionTotalMovieCount(id);
-      lines.push(`${'  '.repeat(depth)}• ${node.name} — ${directMovies} direct / ${totalMovies} total`);
-      const kids = getChildCollections(id).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'', undefined, {sensitivity:'base'}));
-      for(const kid of kids) walk(kid.id, depth+1);
-    }
-    walk(rootId,0);
-    return lines.join('\n');
-  }
-
-  function openHierarchyInspector(){
-    const col = getCollection(currentCollectionId);
-    if(!col){ UI.toast('Open a collection first.'); return; }
-    const directFolders = getChildCollections(col.id).length;
-    const descFolders = getDescendantCollectionIds(col.id).length;
-    const directMovies = (state.movies||[]).filter(m => String(m.collectionId||"") === String(col.id)).length;
-    const descMovies = getDescendantMovieCount(col.id);
-    UI.el.inspectTitle.textContent = `Hierarchy Inspector — ${col.name}`;
-    UI.el.inspectSub.textContent = 'Direct counts vs nested counts for this collection.';
-    UI.el.inspectKv.innerHTML = `
-      <div class="row"><div class="k">Direct folders</div><div class="v">${directFolders}</div></div>
-      <div class="row"><div class="k">Descendant folders</div><div class="v">${descFolders}</div></div>
-      <div class="row"><div class="k">Direct movies</div><div class="v">${directMovies}</div></div>
-      <div class="row"><div class="k">Movies in sub-folders</div><div class="v">${descMovies}</div></div>
-      <div class="row"><div class="k">Total movies</div><div class="v">${directMovies + descMovies}</div></div>`;
-    UI.el.inspectTree.textContent = buildHierarchyTree(col.id);
-    UI.openInspectModal();
   }
 
 
@@ -1972,7 +1843,9 @@ const App = (() => {
       let artNode;
       if(c.artwork){
         artNode = document.createElement("img");
-        setDeferredImgElement(artNode, c.artwork, "Artwork", "collectionArt");
+        artNode.className = "collectionArt";
+        artNode.alt = "Artwork";
+        artNode.src = c.artwork;
       }else{
         artNode = document.createElement("div");
         artNode.className = "collectionArt ph";
@@ -1997,7 +1870,6 @@ const App = (() => {
 
       grid.appendChild(card);
     }
-    hydrateDeferredImages(grid);
   }
 
 
@@ -2212,7 +2084,9 @@ function refreshCollectionSelectOptions(selectedId){
       let artNode;
       if(c.artwork){
         artNode = document.createElement("img");
-        setDeferredImgElement(artNode, c.artwork, "Artwork", "collectionArt");
+        artNode.className = "collectionArt";
+        artNode.alt = "Artwork";
+        artNode.src = c.artwork;
       }else{
         artNode = document.createElement("div");
         artNode.className = "collectionArt ph";
@@ -2237,7 +2111,6 @@ function refreshCollectionSelectOptions(selectedId){
 
       grid.appendChild(card);
     }
-    hydrateDeferredImages(grid);
   }
 
   function getMoviesInCollection(colId){
@@ -2338,7 +2211,7 @@ function getCollectionMoviesFilteredAndSorted(col){
 
     const subCount = getChildCollections(col.id).length;
     const qNow = (UI.el.collectionQ && UI.el.collectionQ.value || "").trim();
-    const left = qNow ? (movies.length + (movies.length===1 ? " direct match" : " direct matches")) : (movies.length + (movies.length===1 ? " direct movie" : " direct movies"));
+    const left = qNow ? (movies.length + (movies.length===1 ? " match" : " matches")) : (movies.length + (movies.length===1 ? " movie" : " movies"));
     const right = subCount + (subCount===1 ? " folder" : " folders");
     const descMovies = getDescendantMovieCount(col.id);
     const tail = descMovies ? ` • ${descMovies} in sub-folders` : "";
@@ -2384,7 +2257,7 @@ function getCollectionMoviesFilteredAndSorted(col){
 
       const posterSrc = (m.poster || m.posterRemote || "");
       const thumb = posterSrc
-        ? deferredThumbMarkupH(posterSrc, m.title || "Poster")
+        ? `<img class="thumb" alt="Poster" src="${escH(posterSrc)}" />`
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
 
       const year = (m.release || "").trim().slice(0,4);
@@ -2406,7 +2279,6 @@ function getCollectionMoviesFilteredAndSorted(col){
       `;
       list.appendChild(div);
     }
-    hydrateDeferredImages(list);
   }
 
   function toggleCollectionReorder(){
@@ -3226,7 +3098,7 @@ if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollect
       const item = document.createElement("div");
       item.className = "pickItem";
       item.innerHTML = `
-        <div class="pickPoster">${poster ? `<img class="deferredImg" src="${DEFERRED_IMG_PLACEHOLDER}" data-src="${escapeHtml(poster)}" alt="" loading="lazy" decoding="async" fetchpriority="low">` : "No<br>poster"}</div>
+        <div class="pickPoster">${poster ? `<img src="${poster}" alt="">` : "No<br>poster"}</div>
         <div class="pickMeta">
           <div class="pickTitle">${escapeHtml(title)}${y ? ` (${escapeHtml(y)})` : ""}</div>
           <div class="pickSub">${escapeHtml(r.original_language ? r.original_language.toUpperCase() : "")}</div>
@@ -3243,7 +3115,6 @@ if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollect
       });
       UI.el.pickList.appendChild(item);
     });
-    hydrateDeferredImages(UI.el.pickList);
     UI.openPickModal();
   }
 
@@ -3341,9 +3212,6 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
         openCollections();
       });
     }
-    if(UI.el.collectionInspectBtn) UI.el.collectionInspectBtn.addEventListener("click", openHierarchyInspector);
-    if(UI.el.inspectCloseBtn) UI.el.inspectCloseBtn.addEventListener("click", UI.closeInspectModal);
-    if(UI.el.inspectModal) UI.el.inspectModal.addEventListener("click", (e)=>{ if(e.target === UI.el.inspectModal) UI.closeInspectModal(); });
 
     // Movie/Wish pills switch pages (Library vs Wish List)
     const showPage = (which, focusEl) => {
