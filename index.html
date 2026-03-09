@@ -569,12 +569,6 @@
       line-height:1.1;
       padding:6px;
     }
-    .deferredImg{
-      background: rgba(255,255,255,.05);
-    }
-    .deferredImg[data-src]{
-      opacity: .92;
-    }
     .collectionName{ font-weight:900; font-size:13px; }
     .collectionCount{ color:var(--muted); font-size:12px; margin-top:2px; }
 
@@ -641,7 +635,7 @@
     <header>
       <div>
         <h1>Movie Vault</h1>
-        <div class="sub" id="buildSubtitle">Plain build — TMDb autofill (v3.1.25a-poster-safe-main-lists)</div>
+        <div class="sub" id="buildSubtitle">Plain build — TMDb autofill (v3.1.25b-poster-edit-safety)</div>
       </div>
       <div class="row" style="gap:10px; align-items:center;">
         <button class="btn small primary" id="addMovieBtn" type="button">Add Movie</button>
@@ -1010,7 +1004,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.25a-poster-safe-main-lists";
+const APP_VERSION = "v3.1.25b-poster-edit-safety";
 
   function applyAppVersion(){
     try{
@@ -1401,6 +1395,58 @@ const UI = (() => {
 
   function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
 
+  const TINY_IMG = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
+  let posterLoadingSuspended = false;
+
+  function posterThumbMarkup(src, alt){
+    const safeSrc = esc(src || "");
+    const safeAlt = esc(alt || "Poster");
+    if(posterLoadingSuspended){
+      return `<div class="thumb ph">POSTER<br/>PAUSED</div>`;
+    }
+    return `<img class="thumb" alt="${safeAlt}" src="${safeSrc}" loading="lazy" decoding="async" fetchpriority="low" />`;
+  }
+
+  function scrubPosterImagesInBackground(){
+    const sels = [
+      '#list img.thumb',
+      '#wishList img.thumb',
+      '#collectionsGrid img.collectionArt',
+      '#subcollectionsGrid img.collectionArt',
+      '#collectionList img.thumb',
+      '#collectionPickList img',
+      '#pickList img'
+    ];
+    document.querySelectorAll(sels.join(',')).forEach((img) => {
+      try{
+        const cur = img.getAttribute('src') || '';
+        if(cur && cur !== TINY_IMG){
+          img.setAttribute('data-held-src', cur);
+          img.setAttribute('src', TINY_IMG);
+        }
+      }catch(_){ }
+    });
+  }
+
+  function restoreHeldPosterImagesInDom(){
+    document.querySelectorAll('img[data-held-src]').forEach((img) => {
+      try{
+        const held = img.getAttribute('data-held-src') || '';
+        if(held) img.setAttribute('src', held);
+        img.removeAttribute('data-held-src');
+      }catch(_){ }
+    });
+  }
+
+  function setPosterLoadingSuspended(on){
+    posterLoadingSuspended = !!on;
+    if(posterLoadingSuspended){
+      scrubPosterImagesInBackground();
+      return;
+    }
+    restoreHeldPosterImagesInDom();
+  }
+
   function formatReleaseDate(dateStr){
     if(!dateStr) return "—";
     const d = new Date(dateStr);
@@ -1464,56 +1510,6 @@ const UI = (() => {
     }
   }
 
-  const DEFERRED_IMG_PLACEHOLDER = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
-  let deferredImgObserver = null;
-
-  function ensureDeferredImgObserver(){
-    if(deferredImgObserver) return deferredImgObserver;
-    if(typeof IntersectionObserver !== "function") return null;
-    deferredImgObserver = new IntersectionObserver((entries, observer) => {
-      for(const entry of entries){
-        if(!entry.isIntersecting) continue;
-        const img = entry.target;
-        const src = img.getAttribute("data-src") || "";
-        if(src){
-          img.src = src;
-          img.removeAttribute("data-src");
-        }
-        observer.unobserve(img);
-      }
-    }, {
-      root: null,
-      rootMargin: "420px 0px",
-      threshold: 0.01,
-    });
-    return deferredImgObserver;
-  }
-
-  function hydrateDeferredImages(root){
-    const scope = root || document;
-    const imgs = scope.querySelectorAll ? scope.querySelectorAll("img[data-src]") : [];
-    if(!imgs || !imgs.length) return;
-    const observer = ensureDeferredImgObserver();
-    imgs.forEach((img) => {
-      if(!img.getAttribute("src")) img.src = DEFERRED_IMG_PLACEHOLDER;
-      if(observer){
-        observer.observe(img);
-      }else{
-        const src = img.getAttribute("data-src") || "";
-        if(src){
-          img.src = src;
-          img.removeAttribute("data-src");
-        }
-      }
-    });
-  }
-
-  function deferredThumbMarkup(src, alt){
-    const safeSrc = esc(src || "");
-    const safeAlt = esc(alt || "Poster");
-    return `<img class="thumb deferredImg" alt="${safeAlt}" src="${DEFERRED_IMG_PLACEHOLDER}" data-src="${safeSrc}" loading="lazy" decoding="async" fetchpriority="low" />`;
-  }
-
   function renderList(movies){
     const handle = "";
     el.list.innerHTML = "";
@@ -1539,7 +1535,7 @@ const UI = (() => {
       div.dataset.id = m.id;
       const posterSrc = (m.poster || m.posterRemote || "");
       const thumb = posterSrc
-        ? deferredThumbMarkup(posterSrc, m.title || "Poster")
+        ? posterThumbMarkup(posterSrc, m.title || "Poster")
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
 
       const year = (m.release || "").trim().slice(0,4);
@@ -1555,7 +1551,6 @@ const UI = (() => {
       `;
       el.list.appendChild(div);
     }
-    hydrateDeferredImages(el.list);
   }
 
 
@@ -1585,7 +1580,7 @@ const UI = (() => {
 
       const posterSrc = (m.poster || m.posterRemote || "");
       const thumb = posterSrc
-        ? deferredThumbMarkup(posterSrc, m.title || "Poster")
+        ? posterThumbMarkup(posterSrc, m.title || "Poster")
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
 
       const year = (m.release || "").trim().slice(0,4);
@@ -1601,7 +1596,6 @@ const UI = (() => {
       `;
       list.appendChild(div);
     }
-    hydrateDeferredImages(list);
   }
 
 function renderAZBar(enabledSet, activeLetter){
@@ -1619,8 +1613,15 @@ function renderAZBar(enabledSet, activeLetter){
     el.azBar.innerHTML = btns;
   }
 
-  function openFormModal(){ el.formModal.classList.add("open"); }
-  function closeFormModal(){ el.formModal.classList.remove("open"); }
+  function openFormModal(){
+    setPosterLoadingSuspended(true);
+    el.formModal.classList.add("open");
+  }
+  function closeFormModal(){
+    el.formModal.classList.remove("open");
+    setPosterLoadingSuspended(false);
+    try{ requestAnimationFrame(() => { try{ render(); }catch(_){ } }); }catch(_){ }
+  }
 
   function openCollectionsToDetail(collectionId){
     collectionsView = "detail";
@@ -2672,8 +2673,8 @@ let editingId = null;
     const dataUrl = await readFileAsDataURL(file);
     const img = await loadImage(dataUrl);
 
-    const maxW = 420;
-    const maxH = 630;
+    const maxW = 300;
+    const maxH = 450;
 
     const w = img.naturalWidth || img.width || 1;
     const h = img.naturalHeight || img.height || 1;
@@ -2688,7 +2689,7 @@ let editingId = null;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0, nw, nh);
 
-    return canvas.toDataURL("image/jpeg", 0.82);
+    return canvas.toDataURL("image/jpeg", 0.70);
   }
 
   function getFilteredSorted(){
@@ -3797,6 +3798,11 @@ document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeToolsM
         const f = UI.el.posterFile.files && UI.el.posterFile.files[0];
         if(!f) return;
         try{
+          setPosterLoadingSuspended(true);
+          if(UI.el.posterPreview){
+            UI.el.posterPreview.removeAttribute('src');
+            UI.el.posterPreview.style.display = 'none';
+          }
           const dataUrl = await shrinkImage(f);
           currentPosterRemote = "";
           setPoster(dataUrl);
@@ -3844,7 +3850,7 @@ document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeToolsM
     document.addEventListener("keydown", (e) => {
       if(e.key === "Escape"){
         if(UI.el.modal.classList.contains("open")){ modalId=null; UI.closeModal(); }
-        if(UI.el.formModal && UI.el.formModal.classList.contains("open")){ UI.closeFormModal(); }
+        if(UI.el.formModal && UI.el.formModal.classList.contains("open")){ closeFormAndReturnIfNeededApp(); }
         if(UI.el.keysModal && UI.el.keysModal.classList.contains("open")){ UI.closeKeysModal(); }
         if(UI.el.pickModal && UI.el.pickModal.classList.contains("open")){ UI.closePickModal(); }
       }
