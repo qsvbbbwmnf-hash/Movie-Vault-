@@ -1004,7 +1004,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.25b-poster-edit-safety";
+const APP_VERSION = "v3.1.25c-poster-edit-preview-fix";
 
   function applyAppVersion(){
     try{
@@ -1395,56 +1395,15 @@ const UI = (() => {
 
   function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
 
-  const TINY_IMG = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
-  let posterLoadingSuspended = false;
-
   function posterThumbMarkup(src, alt){
     const safeSrc = esc(src || "");
     const safeAlt = esc(alt || "Poster");
-    if(posterLoadingSuspended){
-      return `<div class="thumb ph">POSTER<br/>PAUSED</div>`;
-    }
     return `<img class="thumb" alt="${safeAlt}" src="${safeSrc}" loading="lazy" decoding="async" fetchpriority="low" />`;
   }
 
-  function scrubPosterImagesInBackground(){
-    const sels = [
-      '#list img.thumb',
-      '#wishList img.thumb',
-      '#collectionsGrid img.collectionArt',
-      '#subcollectionsGrid img.collectionArt',
-      '#collectionList img.thumb',
-      '#collectionPickList img',
-      '#pickList img'
-    ];
-    document.querySelectorAll(sels.join(',')).forEach((img) => {
-      try{
-        const cur = img.getAttribute('src') || '';
-        if(cur && cur !== TINY_IMG){
-          img.setAttribute('data-held-src', cur);
-          img.setAttribute('src', TINY_IMG);
-        }
-      }catch(_){ }
-    });
-  }
-
-  function restoreHeldPosterImagesInDom(){
-    document.querySelectorAll('img[data-held-src]').forEach((img) => {
-      try{
-        const held = img.getAttribute('data-held-src') || '';
-        if(held) img.setAttribute('src', held);
-        img.removeAttribute('data-held-src');
-      }catch(_){ }
-    });
-  }
-
-  function setPosterLoadingSuspended(on){
-    posterLoadingSuspended = !!on;
-    if(posterLoadingSuspended){
-      scrubPosterImagesInBackground();
-      return;
-    }
-    restoreHeldPosterImagesInDom();
+  function setPosterLoadingSuspended(_on){
+    // v3.1.25c: do not blank poster thumbs while editing.
+    // Safari was dropping/forgetting art after we scrubbed the DOM image src values.
   }
 
   function formatReleaseDate(dateStr){
@@ -3797,19 +3756,34 @@ document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeToolsM
       UI.el.posterFile.addEventListener("change", async () => {
         const f = UI.el.posterFile.files && UI.el.posterFile.files[0];
         if(!f) return;
+        let previewUrl = "";
         try{
-          setPosterLoadingSuspended(true);
+          // Show an immediate local preview first so the user sees the chosen art right away.
+          previewUrl = URL.createObjectURL(f);
           if(UI.el.posterPreview){
-            UI.el.posterPreview.removeAttribute('src');
-            UI.el.posterPreview.style.display = 'none';
+            UI.el.posterPreview.src = previewUrl;
+            UI.el.posterPreview.style.display = "block";
           }
+          if(UI.el.posterRemoveBtn) UI.el.posterRemoveBtn.style.display = "inline-flex";
+
           const dataUrl = await shrinkImage(f);
           currentPosterRemote = "";
           setPoster(dataUrl);
           UI.toast("Poster set.");
         }catch(err){
-          UI.toast(String(err.message || err));
+          // If scaling fails, fall back to the original file so the edit still works.
+          try{
+            const rawData = await readFileAsDataURL(f);
+            currentPosterRemote = "";
+            setPoster(rawData);
+            UI.toast("Poster set.");
+          }catch(_){
+            UI.toast(String(err.message || err));
+          }
         }finally{
+          if(previewUrl){
+            try{ URL.revokeObjectURL(previewUrl); }catch(_){ }
+          }
           UI.el.posterFile.value = "";
         }
       });
