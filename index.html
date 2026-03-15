@@ -1005,7 +1005,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.2.0-indexeddb-posters-storage-meter";
+const APP_VERSION = "v3.2.1-indexeddb-poster-engine-fix";
 
   function applyAppVersion(){
     try{
@@ -1688,7 +1688,7 @@ const UI = (() => {
       const div = document.createElement("div");
       div.className = "item";
       div.dataset.id = m.id;
-      const posterSrc = getMoviePosterSrc(m);
+      const posterSrc = (window.getMoviePosterSrc ? window.getMoviePosterSrc(m) : String((m && (m.poster || m.posterRemote)) || ""));
       const thumb = posterSrc
         ? posterThumbMarkup(posterSrc, m.title || "Poster")
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
@@ -1733,7 +1733,7 @@ const UI = (() => {
       div.className = "item";
       div.dataset.id = m.id;
 
-      const posterSrc = getMoviePosterSrc(m);
+      const posterSrc = (window.getMoviePosterSrc ? window.getMoviePosterSrc(m) : String((m && (m.poster || m.posterRemote)) || ""));
       const thumb = posterSrc
         ? posterThumbMarkup(posterSrc, m.title || "Poster")
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
@@ -1810,7 +1810,7 @@ function renderAZBar(enabledSet, activeLetter){
     if(el.wishToggleBtn){
       el.wishToggleBtn.textContent = m && m.wish ? "Remove from Wish List" : "Move to Wish List";
     }
-    const posterSrc = getMoviePosterSrc(m);
+    const posterSrc = (window.getMoviePosterSrc ? window.getMoviePosterSrc(m) : String((m && (m.poster || m.posterRemote)) || ""));
     const poster = posterSrc
       ? `<img class="modalPoster" alt="Poster" src="${esc(posterSrc)}" />`
       : `<div class="modalPoster" style="display:grid; place-items:center; color:rgba(255,255,255,.55); font-size:12px;">No poster</div>`;
@@ -1997,11 +1997,11 @@ const App = (() => {
       }
 
       let artNode;
-      if(getCollectionArtworkSrc(c)){
+      if((window.getCollectionArtworkSrc ? window.getCollectionArtworkSrc(c) : String((c && c.artwork) || ""))){
         artNode = document.createElement("img");
         artNode.className = "collectionArt";
         artNode.alt = "Artwork";
-        artNode.src = getCollectionArtworkSrc(c);
+        artNode.src = (window.getCollectionArtworkSrc ? window.getCollectionArtworkSrc(c) : String((c && c.artwork) || ""));
       }else{
         artNode = document.createElement("div");
         artNode.className = "collectionArt ph";
@@ -2240,11 +2240,11 @@ function refreshCollectionSelectOptions(selectedId){
       card.dataset.id = c.id;
 
       let artNode;
-      if(getCollectionArtworkSrc(c)){
+      if((window.getCollectionArtworkSrc ? window.getCollectionArtworkSrc(c) : String((c && c.artwork) || ""))){
         artNode = document.createElement("img");
         artNode.className = "collectionArt";
         artNode.alt = "Artwork";
-        artNode.src = getCollectionArtworkSrc(c);
+        artNode.src = (window.getCollectionArtworkSrc ? window.getCollectionArtworkSrc(c) : String((c && c.artwork) || ""));
       }else{
         artNode = document.createElement("div");
         artNode.className = "collectionArt ph";
@@ -2413,7 +2413,7 @@ function getCollectionMoviesFilteredAndSorted(col){
       div.dataset.id = m.id;
       div.draggable = !!collectionReorderMode;
 
-      const posterSrc = getMoviePosterSrc(m);
+      const posterSrc = (window.getMoviePosterSrc ? window.getMoviePosterSrc(m) : String((m && (m.poster || m.posterRemote)) || ""));
       const thumb = posterSrc
         ? `<img class="thumb" alt="Poster" src="${escH(posterSrc)}" />`
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
@@ -2795,11 +2795,13 @@ let editingId = null;
     if(!m) return "";
     return String((m.poster || "") || MediaStore.cached(m.posterKey) || (m.posterRemote || ""));
   }
+  window.getMoviePosterSrc = getMoviePosterSrc;
 
   function getCollectionArtworkSrc(c){
     if(!c) return "";
     return String((c.artwork || "") || MediaStore.cached(c.artworkKey || "") || "");
   }
+  window.getCollectionArtworkSrc = getCollectionArtworkSrc;
 
   function approximateLocalBytes(){
     try{
