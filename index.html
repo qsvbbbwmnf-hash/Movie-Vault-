@@ -652,6 +652,7 @@
           <input id="importFile" class="fileOffscreen" type="file" accept="application/json" />
         </div>
         <div class="pill" id="versionPill" style="opacity:.9;"></div>
+        <div class="pill" id="storagePill" title="Vault storage usage" style="opacity:.9;">Storage —</div>
         <button class="pill pillBtn" id="randomPickPill" type="button" aria-label="Pick a random movie">🎲 Random</button>
         <button class="pill pillBtn" id="countPill" type="button" aria-label="Jump to Library">0 movies</button>
         <button class="pill pillBtn" id="wishCountPill" type="button" aria-label="Jump to Wish List">0 wishes</button>
@@ -1004,7 +1005,7 @@ function titleKey(movie) {
   return t.replace(/^(the\s+|a\s+|an\s+)/i, "").trim().toLowerCase();
 }
 
-const APP_VERSION = "v3.1.25c-poster-edit-preview-fix";
+const APP_VERSION = "v3.2.0-indexeddb-posters-storage-meter";
 
   function applyAppVersion(){
     try{
@@ -1146,7 +1147,192 @@ const Api = (() => {
     return "https://image.tmdb.org/t/p/w500" + path;
   }
 
+
   return { loadKeys, saveKeys, clearKeys, tmdbSearch, tmdbDetails, tmdbCredits, tmdbPosterUrl };
+})();
+
+/* 1.75) IndexedDB media storage (custom posters + collection artwork) */
+const MediaStore = (() => {
+  const DB_NAME = "movie_vault_media_v1";
+  const STORE_NAME = "media";
+  let dbPromise = null;
+  const cache = new Map();
+
+  function supported(){ return typeof indexedDB !== "undefined"; }
+
+  function open(){
+    if(!supported()) return Promise.resolve(null);
+    if(dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      try{
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if(!db.objectStoreNames.contains(STORE_NAME)){
+            db.createObjectStore(STORE_NAME, { keyPath: "id" });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error || new Error("IndexedDB open failed."));
+      }catch(err){ reject(err); }
+    }).catch(err => {
+      console.warn("MediaStore unavailable:", err);
+      dbPromise = Promise.resolve(null);
+      return null;
+    });
+    return dbPromise;
+  }
+
+  function txDone(tx){
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error("IndexedDB transaction failed."));
+      tx.onabort = () => reject(tx.error || new Error("IndexedDB transaction aborted."));
+    });
+  }
+
+  async function putDataUrl(dataUrl, prefix){
+    const src = String(dataUrl || "");
+    if(!src || !/^data:image\//i.test(src)) return "";
+    const db = await open();
+    if(!db) return src;
+    const id = `${prefix || "media"}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).put({ id, dataUrl: src, updatedAt: Date.now() });
+    await txDone(tx);
+    cache.set(id, src);
+    return id;
+  }
+
+  async function getDataUrl(id){
+    const key = String(id || "");
+    if(!key) return "";
+    if(cache.has(key)) return cache.get(key) || "";
+    const db = await open();
+    if(!db) return "";
+    return await new Promise((resolve, reject) => {
+      try{
+        const req = db.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).get(key);
+        req.onsuccess = () => {
+          const val = req.result && req.result.dataUrl ? String(req.result.dataUrl) : "";
+          if(val) cache.set(key, val);
+          resolve(val);
+        };
+        req.onerror = () => reject(req.error || new Error("IndexedDB read failed."));
+      }catch(err){ reject(err); }
+    }).catch(_ => "");
+  }
+
+  async function deleteKey(id){
+    const key = String(id || "");
+    if(!key) return;
+    cache.delete(key);
+    const db = await open();
+    if(!db) return;
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).delete(key);
+    await txDone(tx).catch(() => {});
+  }
+
+  function cached(id){
+    const key = String(id || "");
+    return key ? (cache.get(key) || "") : "";
+  }
+
+  async function warmState(state){
+    const work = [];
+    for(const m of (state && state.movies) || []){
+      if(m && m.posterKey && !cache.has(m.posterKey)) work.push(getDataUrl(m.posterKey));
+    }
+    for(const c of (state && state.collections) || []){
+      if(c && c.artworkKey && !cache.has(c.artworkKey)) work.push(getDataUrl(c.artworkKey));
+    }
+    if(work.length) await Promise.all(work);
+  }
+
+  async function migrateState(state){
+    if(!state || !supported()) return false;
+    let changed = false;
+    for(const m of (state.movies || [])){
+      const poster = String((m && m.poster) || "");
+      if(/^data:image\//i.test(poster)){
+        const key = await putDataUrl(poster, "poster");
+        if(key && key !== poster){
+          m.posterKey = key;
+          m.poster = "";
+          changed = true;
+        }
+      }
+    }
+    for(const c of (state.collections || [])){
+      const art = String((c && c.artwork) || "");
+      if(/^data:image\//i.test(art)){
+        const key = await putDataUrl(art, "art");
+        if(key && key !== art){
+          c.artworkKey = key;
+          c.artwork = "";
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  }
+
+  async function exportInlineState(state){
+    const clone = JSON.parse(JSON.stringify(state || {}));
+    for(const m of (clone.movies || [])){
+      if((!m.poster || !/^data:image\//i.test(String(m.poster))) && m.posterKey){
+        const src = await getDataUrl(m.posterKey);
+        if(src) m.poster = src;
+      }
+    }
+    for(const c of (clone.collections || [])){
+      if((!c.artwork || !/^data:image\//i.test(String(c.artwork))) && c.artworkKey){
+        const src = await getDataUrl(c.artworkKey);
+        if(src) c.artwork = src;
+      }
+    }
+    return clone;
+  }
+
+  async function importInlineState(state){
+    if(!state) return state;
+    for(const m of (state.movies || [])){
+      const poster = String((m && m.poster) || "");
+      if(/^data:image\//i.test(poster)){
+        const key = await putDataUrl(poster, "poster");
+        if(key && key !== poster){
+          m.posterKey = key;
+          m.poster = "";
+        }
+      }
+    }
+    for(const c of (state.collections || [])){
+      const art = String((c && c.artwork) || "");
+      if(/^data:image\//i.test(art)){
+        const key = await putDataUrl(art, "art");
+        if(key && key !== art){
+          c.artworkKey = key;
+          c.artwork = "";
+        }
+      }
+    }
+    return state;
+  }
+
+  async function estimate(){
+    let usage = 0, quota = 0;
+    try{
+      if(navigator.storage && navigator.storage.estimate){
+        const est = await navigator.storage.estimate();
+        usage = Number(est && est.usage || 0);
+        quota = Number(est && est.quota || 0);
+      }
+    }catch(_){}
+    return { usage, quota, cacheCount: cache.size };
+  }
+
+  return { supported, open, putDataUrl, getDataUrl, deleteKey, cached, warmState, migrateState, exportInlineState, importInlineState, estimate };
 })();
 
 
@@ -1180,6 +1366,7 @@ const Store = (() => {
       plot: (m && m.plot) ? String(m.plot).trim() : "",
       poster: (m && m.poster) ? String(m.poster) : "", // data URL (embedded)
       posterRemote: (m && m.posterRemote) ? String(m.posterRemote) : "", // remote URL (TMDb/etc)
+      posterKey: (m && m.posterKey) ? String(m.posterKey) : "", // IndexedDB key for custom poster
       collectionId: (m && m.collectionId !== undefined && m.collectionId !== null) ? String(m.collectionId) : "",
       wish: !!(m && m.wish),
       createdAt: (m && m.createdAt) ? Number(m.createdAt) : now,
@@ -1200,6 +1387,7 @@ const Store = (() => {
         parentId: String(c && c.parentId || ""),
         name: String(c && c.name || "").trim(),
         artwork: String(c && c.artwork || ""),
+        artworkKey: String(c && c.artworkKey || ""),
         sortMode: String(c && c.sortMode || "custom"),
         customOrder: Array.isArray(c && c.customOrder) ? c.customOrder.map(String) : [],
         subOrder: Array.isArray(c && c.subOrder) ? c.subOrder.map(String) : [],
@@ -1276,6 +1464,7 @@ const UI = (() => {
     list: document.getElementById("list"),
     empty: document.getElementById("empty"),
     versionPill: document.getElementById("versionPill"),
+    storagePill: document.getElementById("storagePill"),
     countPill: document.getElementById("countPill"),
     wishCountPill: document.getElementById("wishCountPill"),
     randomPickPill: document.getElementById("randomPickPill"),
@@ -1418,6 +1607,13 @@ const UI = (() => {
 
   function setWishCount(n){ if(el.wishCountPill) el.wishCountPill.textContent = (n===1) ? "1 wish" : `${n} wishes`; }
 
+  function setStorageMeter(label, tone){
+    if(!el.storagePill) return;
+    el.storagePill.textContent = label || "Storage —";
+    el.storagePill.style.background = tone === "warn" ? "rgba(255,77,77,.16)" : "rgba(255,255,255,.06)";
+    el.storagePill.style.border = tone === "warn" ? "1px solid rgba(255,77,77,.30)" : "1px solid rgba(255,255,255,.14)";
+  }
+
   function setEditMode(on){
     el.formTitle.textContent = on ? "Edit Movie" : "Add Movie";
     el.saveBtn.textContent = on ? "Update Movie" : "Save Movie";
@@ -1492,7 +1688,7 @@ const UI = (() => {
       const div = document.createElement("div");
       div.className = "item";
       div.dataset.id = m.id;
-      const posterSrc = (m.poster || m.posterRemote || "");
+      const posterSrc = getMoviePosterSrc(m);
       const thumb = posterSrc
         ? posterThumbMarkup(posterSrc, m.title || "Poster")
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
@@ -1537,7 +1733,7 @@ const UI = (() => {
       div.className = "item";
       div.dataset.id = m.id;
 
-      const posterSrc = (m.poster || m.posterRemote || "");
+      const posterSrc = getMoviePosterSrc(m);
       const thumb = posterSrc
         ? posterThumbMarkup(posterSrc, m.title || "Poster")
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
@@ -1614,7 +1810,7 @@ function renderAZBar(enabledSet, activeLetter){
     if(el.wishToggleBtn){
       el.wishToggleBtn.textContent = m && m.wish ? "Remove from Wish List" : "Move to Wish List";
     }
-    const posterSrc = (m.poster || m.posterRemote || "");
+    const posterSrc = getMoviePosterSrc(m);
     const poster = posterSrc
       ? `<img class="modalPoster" alt="Poster" src="${esc(posterSrc)}" />`
       : `<div class="modalPoster" style="display:grid; place-items:center; color:rgba(255,255,255,.55); font-size:12px;">No poster</div>`;
@@ -1640,7 +1836,7 @@ function renderAZBar(enabledSet, activeLetter){
     if(el.versionPill) el.versionPill.textContent = v || "";
   }
 
-  return { el, toast, toastAction, setVersion, setCount, setWishCount, setEditMode, fillForm, clearForm, setPosterPreview, renderList, renderWishList, renderAZBar, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openModal, closeModal };
+  return { el, toast, toastAction, setVersion, setCount, setWishCount, setStorageMeter, setEditMode, fillForm, clearForm, setPosterPreview, renderList, renderWishList, renderAZBar, openFormModal, closeFormModal, openKeysModal, closeKeysModal, openPickModal, closePickModal, openModal, closeModal };
 })();
 
 /* 4) App */
@@ -1801,11 +1997,11 @@ const App = (() => {
       }
 
       let artNode;
-      if(c.artwork){
+      if(getCollectionArtworkSrc(c)){
         artNode = document.createElement("img");
         artNode.className = "collectionArt";
         artNode.alt = "Artwork";
-        artNode.src = c.artwork;
+        artNode.src = getCollectionArtworkSrc(c);
       }else{
         artNode = document.createElement("div");
         artNode.className = "collectionArt ph";
@@ -1896,6 +2092,7 @@ function refreshCollectionSelectOptions(selectedId){
   let collectionsReturnToId = "";
   let pendingNewCollectionParentId = "";
   let tempCollectionArtwork = "";
+  let tempCollectionArtworkKey = "";
   let tempCollectionParentId = "";
   let collectionReorderMode = false;
   let dragMovieId = "";
@@ -1996,6 +2193,7 @@ function refreshCollectionSelectOptions(selectedId){
       const existing = currentCollectionId ? getCollection(currentCollectionId) : null;
       el.collectionNameInput.value = existing ? existing.name : "";
       tempCollectionArtwork = existing ? (existing.artwork||"") : "";
+      tempCollectionArtworkKey = existing ? (existing.artworkKey||"") : "";
       tempCollectionParentId = existing ? (existing.parentId||"") : (pendingNewCollectionParentId||"");
       // pending parent is one-shot
       pendingNewCollectionParentId = "";
@@ -2042,11 +2240,11 @@ function refreshCollectionSelectOptions(selectedId){
       card.dataset.id = c.id;
 
       let artNode;
-      if(c.artwork){
+      if(getCollectionArtworkSrc(c)){
         artNode = document.createElement("img");
         artNode.className = "collectionArt";
         artNode.alt = "Artwork";
-        artNode.src = c.artwork;
+        artNode.src = getCollectionArtworkSrc(c);
       }else{
         artNode = document.createElement("div");
         artNode.className = "collectionArt ph";
@@ -2215,7 +2413,7 @@ function getCollectionMoviesFilteredAndSorted(col){
       div.dataset.id = m.id;
       div.draggable = !!collectionReorderMode;
 
-      const posterSrc = (m.poster || m.posterRemote || "");
+      const posterSrc = getMoviePosterSrc(m);
       const thumb = posterSrc
         ? `<img class="thumb" alt="Poster" src="${escH(posterSrc)}" />`
         : `<div class="thumb ph">NO<br/>POSTER</div>`;
@@ -2370,9 +2568,10 @@ function renderCollectionPick(){
 }
 
   function syncCollectionArtUI(){
-    const has = !!tempCollectionArtwork;
+    const previewSrc = tempCollectionArtwork || MediaStore.cached(tempCollectionArtworkKey) || "";
+    const has = !!previewSrc;
     UI.el.collectionArtPreview.style.display = has ? "block" : "none";
-    UI.el.collectionArtPreview.src = tempCollectionArtwork || "";
+    UI.el.collectionArtPreview.src = previewSrc || "";
     UI.el.collectionArtRemoveBtn.style.display = has ? "inline-flex" : "none";
   }
 
@@ -2547,6 +2746,7 @@ let editingId = null;
   let modalId = null;
   let currentPoster = "";
   let currentPosterRemote = "";
+  let currentPosterKey = "";
   let currentFullCast = "";
 
   // v3 experimental: remember collection context when adding a new movie from inside a collection
@@ -2591,11 +2791,62 @@ let editingId = null;
 
   function getMovie(id){ return state.movies.find(x => x.id === id) || null; }
 
+  function getMoviePosterSrc(m){
+    if(!m) return "";
+    return String((m.poster || "") || MediaStore.cached(m.posterKey) || (m.posterRemote || ""));
+  }
+
+  function getCollectionArtworkSrc(c){
+    if(!c) return "";
+    return String((c.artwork || "") || MediaStore.cached(c.artworkKey || "") || "");
+  }
+
+  function approximateLocalBytes(){
+    try{
+      const raw = JSON.stringify(state || {});
+      return new Blob([raw]).size;
+    }catch(_){ return 0; }
+  }
+
+  function prettyBytes(n){
+    const num = Number(n || 0);
+    if(num <= 0) return "0B";
+    const units = ["B","KB","MB","GB"];
+    let v = num, i = 0;
+    while(v >= 1024 && i < units.length - 1){
+      v /= 1024; i++;
+    }
+    return `${v >= 100 ? Math.round(v) : v.toFixed(v >= 10 ? 1 : 2)}${units[i]}`;
+  }
+
+  async function updateStorageMeter(){
+    try{
+      const metaBytes = approximateLocalBytes();
+      const est = await MediaStore.estimate();
+      const label = `Storage ${prettyBytes(metaBytes)} meta • ${prettyBytes(est.usage || 0)} total`;
+      const tone = metaBytes > 3500000 ? "warn" : "";
+      if(UI.setStorageMeter) UI.setStorageMeter(label, tone);
+    }catch(_){
+      if(UI.setStorageMeter) UI.setStorageMeter(`Storage ${prettyBytes(approximateLocalBytes())} meta`, "");
+    }
+  }
+
+  async function migrateEmbeddedMediaIfNeeded(){
+    try{
+      const changed = await MediaStore.migrateState(state);
+      if(changed){
+        Store.save(state);
+        await updateStorageMeter();
+      }
+      await MediaStore.warmState(state);
+    }catch(err){
+      console.warn("Media migration skipped:", err);
+    }
+  }
+
   function setPoster(src){
     const s = (src || "");
-    // Hybrid poster system:
-    // - If src is a data URL: store it as embedded poster, clear remote.
-    // - If src is http(s): treat it as remote poster URL, keep embedded empty.
+    currentPosterKey = "";
     if(/^https?:\/\//i.test(s)){
       currentPoster = "";
       currentPosterRemote = s;
@@ -2603,10 +2854,15 @@ let editingId = null;
       return;
     }
     currentPoster = s;
-    // If user supplies an embedded poster, we consider it authoritative.
-    // (Remote is still kept on the movie record if it existed, but current edit uses embedded.)
     if(s) currentPosterRemote = "";
     UI.setPosterPreview(currentPoster);
+  }
+
+  function setPosterFromMovie(movie){
+    currentPoster = "";
+    currentPosterKey = String((movie && movie.posterKey) || "");
+    currentPosterRemote = String((movie && movie.posterRemote) || "");
+    UI.setPosterPreview(getMoviePosterSrc(movie));
   }
 
   function readFileAsDataURL(file){
@@ -2632,8 +2888,8 @@ let editingId = null;
     const dataUrl = await readFileAsDataURL(file);
     const img = await loadImage(dataUrl);
 
-    const maxW = 300;
-    const maxH = 450;
+    const maxW = 260;
+    const maxH = 390;
 
     const w = img.naturalWidth || img.width || 1;
     const h = img.naturalHeight || img.height || 1;
@@ -2648,7 +2904,7 @@ let editingId = null;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0, nw, nh);
 
-    return canvas.toDataURL("image/jpeg", 0.70);
+    return canvas.toDataURL("image/jpeg", 0.62);
   }
 
   function getFilteredSorted(){
@@ -2723,58 +2979,11 @@ let editingId = null;
   }
 
   function persist(){
-    // Try to save normally; if iOS quota is hit (usually from embedded posters),
-    // fall back by stripping embedded base64 posters while keeping remote URLs.
-    let ok = Store.save(state);
-    if(ok) return;
-
-    // Progressive fallback: first strip only LARGE embedded images.
-    // (Keeps small thumbnails and small collection art when possible.)
-    const MAX_POSTER_CHARS = 45000;   // ~33KB base64 payload-ish
-    const MAX_ART_CHARS    = 38000;   // ~28KB base64 payload-ish
-
-    const patched = {
-      movies: (state.movies||[]).map(m => {
-        const poster = String((m && m.poster) || "");
-        const posterRemote = String((m && m.posterRemote) || "");
-        let keepPoster = poster;
-        if(/^data:image\//i.test(poster) && poster.length > MAX_POSTER_CHARS) keepPoster = "";
-        return { ...m, poster: keepPoster, posterRemote };
-      }),
-      collections: (state.collections||[]).map(c => {
-        const art = String((c && c.artwork) || "");
-        let keepArt = art;
-        if(/^data:image\//i.test(art) && art.length > MAX_ART_CHARS) keepArt = "";
-        return { ...c, artwork: keepArt };
-      }),
-    };
-    for(const k of Object.keys(state||{})){
-      if(k !== "movies" && k !== "collections") patched[k] = state[k];
+    // Metadata stays in localStorage; heavy media lives in IndexedDB.
+    const ok = Store.save(state);
+    if(!ok){
+      UI.toast("Could not save vault metadata.");
     }
-    state = patched;
-    ok = Store.save(state);
-    if(ok) return;
-
-    // Final fallback: if even that fails, strip ALL embedded images.
-    const hard = {
-      movies: (state.movies||[]).map(m => {
-        const poster = String((m && m.poster) || "");
-        const posterRemote = String((m && m.posterRemote) || "");
-        const keepPoster = (/^data:image\//i.test(poster)) ? "" : poster;
-        return { ...m, poster: keepPoster, posterRemote };
-      }),
-      collections: (state.collections||[]).map(c => {
-        const art = String((c && c.artwork) || "");
-        const keepArt = (/^data:image\//i.test(art)) ? "" : art;
-        return { ...c, artwork: keepArt };
-      }),
-    };
-    for(const k of Object.keys(state||{})){
-      if(k !== "movies" && k !== "collections") hard[k] = state[k];
-    }
-    state = hard;
-    Store.save(state);
-    // Don't toast here (would spam); restore path already informs the user.
   }
 
   function render(){
@@ -2792,6 +3001,7 @@ let editingId = null;
     if(UI.setWishCount) UI.setWishCount(wishArr.length);
 
     persist();
+    updateStorageMeter();
   }
 
   function resetForm(){
@@ -2802,6 +3012,7 @@ let editingId = null;
       UI.el.collectionSelect.classList.remove('locked');
     }
     currentPosterRemote = "";
+    currentPosterKey = "";
     setPoster("");
     currentFullCast = "";
     UI.clearForm();
@@ -2810,7 +3021,7 @@ let editingId = null;
     if(UI.el.saveBtn) UI.el.saveBtn.disabled = true;
   }
 
-  function saveMovie(){
+  async function saveMovie(){
     const title = UI.el.title.value.trim();
     if(!title){
       UI.toast("Title is required.");
@@ -2835,6 +3046,15 @@ if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollect
   nextCollectionId = "";
 }
 
+    let posterKey = String((base && base.posterKey) || currentPosterKey || "");
+    if(currentPoster && /^data:image\//i.test(currentPoster)){
+      if(posterKey) await MediaStore.deleteKey(posterKey);
+      posterKey = await MediaStore.putDataUrl(currentPoster, "poster");
+    }else if(currentPoster === ""){
+      // no newly selected embedded poster
+      if(!currentPosterRemote && !currentPosterKey) posterKey = "";
+    }
+
     const movie = Store.normalize({
       ...base,
       id: editingId || base.id,
@@ -2845,8 +3065,9 @@ if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollect
       cast: (UI.el.cast ? UI.el.cast.value.trim() : ""),
       fullCast: (currentFullCast || (UI.el.cast ? UI.el.cast.value.trim() : "")),
       plot: (UI.el.plot ? UI.el.plot.value.trim() : ""),
-      poster: currentPoster || "",
+      poster: "",
       posterRemote: currentPosterRemote || "",
+      posterKey: posterKey || "",
       wish: (UI.el.wish ? !!UI.el.wish.checked : false),
       updatedAt: Date.now(),
     });
@@ -2938,8 +3159,7 @@ if(nextCollectionId && !(state.collections || []).some(c => c.id === nextCollect
     UI.setEditMode(true);
     refreshCollectionSelectOptions(m.collectionId || "");
     UI.fillForm(m);
-    currentPosterRemote = (m.posterRemote || "");
-    setPoster(m.poster || m.posterRemote || "");
+    setPosterFromMovie(m);
     currentFullCast = (m.fullCast || m.cast || "");
     UI.closeModal();
     UI.openFormModal();
@@ -3370,7 +3590,7 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
       showCollectionsView();
     });
 
-    if(UI.el.collectionSaveBtn) UI.el.collectionSaveBtn.addEventListener("click", () => {
+    if(UI.el.collectionSaveBtn) UI.el.collectionSaveBtn.addEventListener("click", async () => {
       try{
       const name = (UI.el.collectionNameInput.value||"").trim();
       if(!name){ UI.toast("Collection name is required."); UI.el.collectionNameInput.focus(); return; }
@@ -3379,17 +3599,30 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
         const col = getCollection(currentCollectionId);
         if(!col){ UI.toast("Collection not found."); collectionsView="list"; showCollectionsView(); return; }
         col.name = name;
-        col.artwork = tempCollectionArtwork || "";
+        let nextArtworkKey = String(col.artworkKey || tempCollectionArtworkKey || "");
+        if(tempCollectionArtwork && /^data:image\//i.test(tempCollectionArtwork)){
+          if(nextArtworkKey) await MediaStore.deleteKey(nextArtworkKey);
+          nextArtworkKey = await MediaStore.putDataUrl(tempCollectionArtwork, "art");
+        }else if(!tempCollectionArtwork && !tempCollectionArtworkKey){
+          nextArtworkKey = "";
+        }
+        col.artwork = "";
+        col.artworkKey = nextArtworkKey || tempCollectionArtworkKey || "";
         // parentId is preserved unless this edit was created from "New Sub-Collection"
         col.parentId = (tempCollectionParentId || "");
         if(col.parentId === col.id) col.parentId = "";
         col.updatedAt = Date.now();
       }else{
         const id = uid();
+        let nextArtworkKey = String(tempCollectionArtworkKey || "");
+        if(tempCollectionArtwork && /^data:image\//i.test(tempCollectionArtwork)){
+          nextArtworkKey = await MediaStore.putDataUrl(tempCollectionArtwork, "art");
+        }
         state.collections.push({
           id,
           name,
-          artwork: tempCollectionArtwork || "",
+          artwork: "",
+          artworkKey: nextArtworkKey || "",
           parentId: (tempCollectionParentId || ""),
           sortMode: "custom",
           customOrder: [],
@@ -3435,13 +3668,14 @@ const hasTitle = !!(UI.el.title && UI.el.title.value.trim());
     });
 
     if(UI.el.collectionArtBtn) UI.el.collectionArtBtn.addEventListener("click", () => UI.el.collectionArtFile && UI.el.collectionArtFile.click());
-    if(UI.el.collectionArtRemoveBtn) UI.el.collectionArtRemoveBtn.addEventListener("click", () => { tempCollectionArtwork = ""; syncCollectionArtUI(); });
+    if(UI.el.collectionArtRemoveBtn) UI.el.collectionArtRemoveBtn.addEventListener("click", () => { tempCollectionArtwork = ""; tempCollectionArtworkKey = ""; syncCollectionArtUI(); });
     if(UI.el.collectionArtFile) UI.el.collectionArtFile.addEventListener("change", async (e) => {
       const f = e.target.files && e.target.files[0];
       if(!f) return;
       try{
         // Collection artwork should be small enough to survive iPad Safari storage.
-        tempCollectionArtwork = await fileToDataUrlScaled(f, 300, 0.70);
+        tempCollectionArtwork = await fileToDataUrlScaled(f, 300, 0.68);
+        tempCollectionArtworkKey = "";
         syncCollectionArtUI();
       }catch(_){ UI.toast("Could not read image."); }
       UI.el.collectionArtFile.value = "";
@@ -3750,7 +3984,7 @@ document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeToolsM
       UI.el.posterBtn.addEventListener("click", () => UI.el.posterFile.click());
     }
     if(UI.el.posterRemoveBtn){
-      UI.el.posterRemoveBtn.addEventListener("click", () => { currentPosterRemote = ""; setPoster(""); });
+      UI.el.posterRemoveBtn.addEventListener("click", () => { currentPosterRemote = ""; currentPosterKey = ""; setPoster(""); });
     }
     if(UI.el.posterFile){
       UI.el.posterFile.addEventListener("change", async () => {
@@ -3768,6 +4002,7 @@ document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeToolsM
 
           const dataUrl = await shrinkImage(f);
           currentPosterRemote = "";
+          currentPosterKey = "";
           setPoster(dataUrl);
           UI.toast("Poster set.");
         }catch(err){
@@ -3775,6 +4010,7 @@ document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeToolsM
           try{
             const rawData = await readFileAsDataURL(f);
             currentPosterRemote = "";
+            currentPosterKey = "";
             setPoster(rawData);
             UI.toast("Poster set.");
           }catch(_){
@@ -3853,13 +4089,15 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
       closeToolsMenu();
       // iOS/iPadOS: this opens the Share Sheet where you can "Save to Files" and pick a folder/name
       try{
-        const file = Store.makeExportFile(state);
+        const exportState = await MediaStore.exportInlineState(state);
+        const file = Store.makeExportFile(exportState);
         if(navigator.share && (!navigator.canShare || navigator.canShare({ files:[file] }))){
           await navigator.share({ files:[file], title:"Movie Vault Export", text:"Movie Vault backup JSON" });
           UI.toast("Share sheet opened.");
         }else{
           // Fallback: normal download
-          Store.downloadExport(state);
+          const exportState2 = await MediaStore.exportInlineState(state);
+          Store.downloadExport(exportState2);
           UI.toast("Downloaded (share not supported).");
         }
       }catch(err){
@@ -3876,6 +4114,7 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
         // Restore from Files should immediately become the ACTIVE vault:
         // overwrite localStorage + in-memory state so refresh/tab reopen keeps it.
         state = await Store.importJSON(f);
+        state = await MediaStore.importInlineState(state);
 
         // Ensure collections structure exists + is normalized (older backups may omit it).
         if(!state || typeof state !== "object") state = { movies: [], collections: [] };
@@ -3888,6 +4127,7 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
           parentId: String(c && c.parentId || ""),
           name: String(c && c.name || "").trim(),
           artwork: String(c && c.artwork || ""),
+          artworkKey: String(c && c.artworkKey || ""),
           sortMode: String(c && c.sortMode || "custom"),
           customOrder: Array.isArray(c && c.customOrder) ? c.customOrder.map(String) : [],
           childOrder: Array.isArray(c && c.childOrder) ? c.childOrder.map(String) : [],
@@ -3981,6 +4221,11 @@ if(UI.el.backupBtnTop) UI.el.backupBtnTop.addEventListener("click", async () => 
     refreshCollectionSelectOptions("");
     render();
     syncSaveEnabled();
+    (async () => {
+      await migrateEmbeddedMediaIfNeeded();
+      await updateStorageMeter();
+      render();
+    })();
   }
 
   return { init: wire };
